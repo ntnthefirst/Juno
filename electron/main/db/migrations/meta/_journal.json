@@ -225,6 +225,41 @@
       "when": 1794151049525,
       "tag": "0031_calendar_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1794612240733,
+      "tag": "0032_outbox_cancelled_to_draft",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1794613248187,
+      "tag": "0033_document_folders_and_any_file",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1794620611695,
+      "tag": "0034_mail_seen_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1794659839811,
+      "tag": "0035_documents_out_of_folders",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794788654807,
+      "tag": "0036_document_templates_soft_deleted",
+      "breakpoints": true
     }
   ]
 }

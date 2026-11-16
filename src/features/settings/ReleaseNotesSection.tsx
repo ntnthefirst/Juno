@@ -3,6 +3,7 @@ import type { ReleaseNote } from "@shared/types";
 import { messageOf } from "../../lib/errors";
 import { ReleaseNoteEntry } from "./ReleaseNoteEntry";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 /** Every version's notes, newest first. Read-only. */
 export function ReleaseNotesSection() {
@@ -33,7 +34,7 @@ export function ReleaseNotesSection() {
 			description="What each version of Juno changed, newest first."
 		>
 			{notes === null ? (
-				error ? null : <p className="text-[var(--ink-muted)]">Loading.</p>
+				error ? null : <CardSkeleton lines={6} />
 			) : notes.length === 0 ? (
 				<p className="text-[var(--ink-muted)]">This build came without release notes.</p>
 			) : (

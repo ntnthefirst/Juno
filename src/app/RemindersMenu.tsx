@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import type { Reminder, ReminderBucket } from "@shared/types";
 import { Checkbox } from "../components/Checkbox";
 import { messageOf } from "../lib/errors";
+import { announceRecordsChanged } from "../lib/new-record";
+import { requestOpen } from "../lib/open-entity";
 import { BUCKET_LABELS, describeDue, todayIso } from "../features/reminders/format";
 import { TitleMenu, TitleMenuHeading } from "./TitleMenu";
+import { RowsSkeleton } from "../components/RowsSkeleton";
 
 type RemindersMenuProps = {
 	at: { x: number; y: number };
 	onClose: () => void;
-	/** The Reminders screen, for the foot of the menu and a click on a row. */
+	/** The Reminders screen, for the foot of the menu. */
 	onOpenScreen: () => void;
 };
 
@@ -19,7 +22,7 @@ const LIMIT = 8;
 /**
  * The reminders that need you soon, under the bell, as Recent lists records
  * under its clock. The circle ticks one off where it is; a click on the rest
- * of a row, or the foot of the menu, opens the Reminders screen.
+ * of a row opens that reminder, and the foot of the menu the Reminders screen.
  */
 export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps) {
 	const [rows, setRows] = useState<Reminder[] | null>(null);
@@ -47,8 +50,10 @@ export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps)
 		if (busy) return;
 		setBusy(reminder.id);
 		try {
-			await window.juno.reminders.complete(reminder.id);
+			await window.juno.reminders.complete(reminder.id, null, reminder.dueOn);
 			load();
+			// The screen behind the menu may list the same reminder, so it reads again too.
+			announceRecordsChanged();
 		} catch (cause: unknown) {
 			setError(messageOf(cause));
 		} finally {
@@ -56,9 +61,11 @@ export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps)
 		}
 	}
 
-	function openScreen() {
+	/** The reminder itself, in its form on the Reminders screen, with the list behind it. */
+	function openReminder(reminder: Reminder) {
 		onClose();
-		onOpenScreen();
+		// After the menu has gone, so the form lands on a screen with nothing over it.
+		window.setTimeout(() => requestOpen({ kind: "reminder", id: reminder.id }), 0);
 	}
 
 	return (
@@ -68,7 +75,7 @@ export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps)
 					{error}
 				</p>
 			) : rows === null ? (
-				<p className="px-2.5 py-3 text-dense text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={3} divided={false} />
 			) : rows.length === 0 ? (
 				<p className="px-2.5 py-3 text-dense text-[var(--ink-muted)]">Nothing is due this week.</p>
 			) : (
@@ -94,7 +101,11 @@ export function RemindersMenu({ at, onClose, onOpenScreen }: RemindersMenuProps)
 												aria-label={`Mark ${reminder.title} done`}
 											/>
 										</span>
-										<button type="button" onClick={openScreen} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+										<button
+											type="button"
+											onClick={() => openReminder(reminder)}
+											className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+										>
 											<span className="min-w-0 flex-1">
 												<span className="block truncate text-base text-[var(--ink)]">{reminder.title}</span>
 												{meta ? <span className="block truncate text-sm text-[var(--ink-muted)]">{meta}</span> : null}

@@ -28,12 +28,16 @@ function onDay(date: string, base: string | null): string {
 	return new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1, hours, minutes).toISOString();
 }
 
-/** Hours and minutes as typed: "1" and "30". Both may be empty, which is zero. */
+/**
+ * Hours and minutes as typed: "1" and "30", or "1.5" and nothing. Both may be
+ * empty, which is zero. The hours field offers a decimal keyboard, so a part of
+ * an hour is taken rather than refused with a message about the minutes.
+ */
 function toMinutes(hours: string, minutes: string): number | null {
 	const h = hours.trim() === "" ? 0 : Number(hours);
 	const m = minutes.trim() === "" ? 0 : Number(minutes);
-	if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || m < 0 || m > 59) return null;
-	return h * 60 + m;
+	if (!Number.isFinite(h) || !Number.isInteger(m) || h < 0 || m < 0 || m > 59) return null;
+	return Math.round(h * 60) + m;
 }
 
 /**

@@ -6,6 +6,7 @@ import { IconButton } from "../../components/IconButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { DetailRow } from "./DetailRow";
 import { DetailValue } from "./DetailValue";
+import { useClickGate } from "../../lib/click-timing";
 import { messageOf } from "../../lib/errors";
 
 /** What the remove dialog needs to ask about one value. */
@@ -25,6 +26,8 @@ type ClientDetailsProps = {
 	onEditEmail: (email: ClientEmail) => void;
 	onEditPhone: (phone: ClientPhone) => void;
 	onEditLink: (link: ClientLink) => void;
+	/** A new message to one of the addresses, in Juno's own composer. */
+	onMailTo: (address: string) => void;
 	/** Asks before anything goes, with the existing dialog. */
 	onRemove: (removal: DetailRemoval) => void;
 };
@@ -68,10 +71,14 @@ export function ClientDetails({
 	onEditEmail,
 	onEditPhone,
 	onEditLink,
+	onMailTo,
 	onRemove,
 }: ClientDetailsProps) {
 	// What failed outside a field (Make primary, opening a link), said under the list.
 	const [problem, setProblem] = useState<string | null>(null);
+	// A double click on an address edits it, so a single click waits for the
+	// second before it opens the composer, which replaces the whole record.
+	const mailClick = useClickGate<string>({ single: onMailTo, double: () => undefined });
 
 	async function run(action: () => Promise<unknown>) {
 		setProblem(null);
@@ -160,9 +167,18 @@ export function ClientDetails({
 							{ label: "Edit label", open: () => onEditEmail(email) },
 						)}
 					>
-						<span data-selectable className="min-w-0 truncate text-base">
+						<button
+							type="button"
+							title={`Write to ${email.email}`}
+							onClick={(event) => {
+								// Enter or Space has no second click to wait for.
+								if (event.detail === 0) onMailTo(email.email);
+								else mailClick.click(email.email, event.detail);
+							}}
+							className={LINK_CLASS}
+						>
 							{email.email}
-						</span>
+						</button>
 						{primaryOrLabel(email.isPrimary, email.label)}
 					</DetailValue>
 				))}

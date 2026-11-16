@@ -11,18 +11,18 @@ app and what still differs is listed at the end, with the reason it was left.
 
 ## A. Only you can do these
 
-### A1. Your own real document templates
+### A1. Your own real contracts
 
-Nothing that ships is fit to send to a client. A new install gets one example
-document template and it is a specimen. An install that still has the five
-invented templates from phase 1 (`nda`, `development_agreement`,
-`hosting_agreement`, `project_scope`, `addendum`) keeps them as they are, and
-they are specimens too.
+Document templates were removed (decision 82). A document made earlier from an
+unreviewed template is still a specimen and cannot be signed: write your real
+contracts in Word or as a page, keep them on the client's Documents tab or in
+Files, and sign those. **Do not send a specimen to a client.** That is what the
+banner is for.
 
-Write your real contract templates in the app, from the example or from
-nothing. The placeholder syntax and the fields are in `docs/templates.md`. **Do
-not send a document generated from an unreviewed template to a client.** That
-is what the banner is for.
+- **Paste from Explorer has not been tried on this machine by hand.** Copy two
+  files in Explorer and press Ctrl V in Files, then copy two documents in Juno
+  and paste them into an Explorer folder. The list is read and written through
+  PowerShell (decision 82); note it if either side takes only the first file.
 
 ### A2. Things that need a real account, client or program
 
@@ -71,14 +71,9 @@ Everything decided and buildable here is built. What is left needs your hands.
   the server, send one more message, and check the failure is listed once with
   its reason and not tried again at the next sync. Note which provider you used,
   and whether it answered the move with the new UID or only at the next sync.
-- **No real Word file has been imported yet.** The reader is tested against
-  Mammoth's own output and a hand-built `.docx`. Import one of your contracts
-  (Documents, Templates, Import Word file) and write down what comes across
-  wrong.
-- **No component has been used on a real contract yet.** Components are proven
-  through the services and the smoke walk. Make your letterhead as one, place it in
-  two templates, change it, and check both templates lose their review and a
-  document made before the change still reads as it did.
+- **No real Word file has been previewed yet.** The reader is tested against
+  Mammoth's own output and a hand-built `.docx`. Add one of your contracts to a
+  Documents tab and write down what its preview gets wrong.
 - **The release itself.** `npm run smoke:packaged` and an installer on a clean
   machine, then the first published release, are yours to run.
 
@@ -122,7 +117,7 @@ Everything decided and buildable here is built. What is left needs your hands.
 
 The file is read only from the code side. These are yours to draw or tidy.
 
-- **Draw** the document-from-template window, the Sign flow (place the stamp,
+- **Draw** the Sign flow (place the stamp,
   sign digitally, the audit page), the Notes empty state (the screen uses the
   shared empty state until it is drawn), and a home for automations (they are
   the Agent screen's third tab until then).
@@ -148,7 +143,17 @@ The file is read only from the code side. These are yours to draw or tidy.
 
 Nothing here needs a decision, only time.
 
-Nothing is open here.
+- **A page cannot be duplicated or copied yet.** Its pictures live in a folder
+  named after the page (decision 68), so a copy would need its own folder and
+  its blocks pointed at it. The service refuses with a sentence until then.
+- **Word that hangs is stopped, and its process can stay.** A conversion that
+  passes the minute stops the script, but Word was started by COM, not by the
+  script, so a Word stuck on a dialog keeps running hidden until it is ended
+  in Task Manager. Recording its process id at start would let Juno end it.
+- **Dragging a document onto another record moves nothing.** With no tree
+  (decision 81) Move to is the way; a drop of Juno's own drag on a client's or
+  a project's Documents tab is let go of. Taking it as a move there would need
+  the tab to tell its own drag from one started on another tab.
 
 ---
 
@@ -187,13 +192,14 @@ Each of these was compared with its frame and kept, for the reason given.
   Backup page. The Help and about frame draws no About card, and the app keeps
   it (version and database path). Mail accounts rows keep Pause, Edit and Remove
   beside the status badge, which the frame omits.
-- **Documents, Templates, Agent and Notes.** The viewer frame draws a pencil in
-  the title bar for a generated document, which has no edit (a new version is the
-  way), a viewer bar 125px tall (the app keeps 48) and the details as plain text
-  (the app keeps the status, client and project as fields, and the template and
-  timeline under them). The Templates frame has no search row and no Components
-  button (the app keeps the search, and Components is in the title bar's more
-  menu). The mail editor frame draws a reduced layers and design panel, where the
+- **Documents, Files, Agent and Notes.** The viewer frame draws a pencil in
+  the title bar for a document made from a template, which has no edit (a new
+  version is the way), a viewer bar 125px tall (the app keeps 48) and the
+  details as plain text (the app keeps the status, client and project as
+  fields, and the source and timeline under them). The Files frame's menu draws
+  Open in the default app under Open; the app leaves it out, because Open
+  already opens a file in its own app, and keeps Copy to, Move to, Convert,
+  Sign, Download and Send under Rename. The mail editor frame draws a reduced layers and design panel, where the
   editor has breakpoints, spacing, typography and a code view. The Notes list
   frame says "Previous 7 days" where the app uses the shared day split.
 - **Mail.** The composer toolbar has an emoji button the frame does not draw.

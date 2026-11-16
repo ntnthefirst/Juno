@@ -11,7 +11,8 @@
  * Nothing in here writes to the server. The source interface has no method
  * that could. The one thing that does act on the server after a pass is the
  * mailbox rules, and they are not called from here: the app hands this module a
- * hook (`afterInbox`), so the sync keeps no import of the filing code.
+ * hook (`afterInbox`), so the sync keeps no import of the filing code. Read
+ * states set offline reach the server the same way, through `afterPass`.
  */
 import type { MailSyncStatus } from "../../shared/types";
 import { getDb, type Db } from "../db";
@@ -64,6 +65,13 @@ interface SyncConfig {
 	 * from it never fails the sync.
 	 */
 	afterInbox?: (accountId: string, db: Db) => Promise<unknown>;
+	/**
+	 * Runs after every folder of an account has been pulled, with that account.
+	 * The read states set while the server could not be reached are written to
+	 * it here, because a pass that got this far has reached it. Awaited, and an
+	 * error from it never fails the sync: the states stay pending for the next.
+	 */
+	afterPass?: (accountId: string, db: Db) => Promise<unknown>;
 }
 
 let config: SyncConfig | null = null;
@@ -329,6 +337,10 @@ export async function syncAccount(accountId: string, db: Db = getDb()): Promise<
 
 		for (const folder of enabled) {
 			await syncFolder(db, source, account, folder, progress);
+		}
+
+		if (config?.afterPass && !paused()) {
+			await config.afterPass(accountId, db).catch(() => undefined);
 		}
 
 		await accounts.recordSync(accountId, { error: null }, db);

@@ -22,7 +22,7 @@ import { isOpenableAttachment } from "../../shared/attachment-kind";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { clients, mailAccounts, mailAttachments, mailFolders, mailMessages, mailThreads, projects } from "../db/schema";
-import { outgoingForThread } from "./mail-outbox";
+import { counts as outboxCounts, outgoingForThread } from "./mail-outbox";
 import { sanitiseHtml, textDocumentBody } from "./mail-sanitise";
 
 function escapeLike(value: string): string {
@@ -578,7 +578,7 @@ export function attachmentPath(id: string, db: Db = getDb()): { path: string; fi
 export function openableAttachmentPath(id: string, db: Db = getDb()): string {
 	const { path, filename } = attachmentPath(id, db);
 	if (!isOpenableAttachment(filename)) {
-		throw new Error(`${filename} cannot be opened from Juno. Use Show in folder instead.`);
+		throw new Error(`${filename} cannot be opened from Juno. Use Save as to keep a copy.`);
 	}
 	return path;
 }
@@ -717,6 +717,19 @@ export async function linkProject(
 		.where(eq(mailThreads.id, threadId))
 		.run();
 	return requireThread(threadId, db);
+}
+
+/**
+ * How many rows Drafts lists: the server's drafts, one per conversation as the
+ * list draws them, and every message Juno has not sent yet, whatever it waits
+ * on (decision 78). The sidebar shows this number beside Drafts, so the count
+ * and the list are the same two queries and cannot disagree. Leave the account
+ * out for every account together.
+ */
+export async function countDrafts(accountId?: string, db: Db = getDb()): Promise<number> {
+	const server = await listThreadIds({ ...(accountId ? { accountId } : {}), folderSpecialUse: "drafts" }, db);
+	const waiting = await outboxCounts(accountId, db);
+	return server.length + waiting.drafts + waiting.pending + waiting.queued + waiting.failed;
 }
 
 /** How many live threads point at a client, for the client screen. */

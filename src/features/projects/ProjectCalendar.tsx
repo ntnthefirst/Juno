@@ -6,6 +6,7 @@ import { messageOf } from "../../lib/errors";
 import { addDays, formatTime, localDateOfInstant, todayIso } from "../calendar/dates";
 import { editScheduleForm, type ScheduleForm } from "../calendar/schedule-form";
 import { dayLabel } from "./time-format";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ProjectCalendarProps = {
 	projectId: string;
@@ -153,7 +154,9 @@ export function ProjectCalendar({ projectId, version, onAddEvent, onOpenForm }: 
 			</div>
 
 			{load.status === "loading" ? (
-				<p className="mt-3 text-sm text-[var(--ink-muted)]">Loading.</p>
+				<div className="mt-3">
+					<RowsSkeleton rows={3} />
+				</div>
 			) : load.status === "error" ? (
 				<p data-selectable className="mt-3 text-sm text-[var(--risk)]">
 					{load.message}

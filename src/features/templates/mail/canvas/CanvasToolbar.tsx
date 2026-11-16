@@ -27,8 +27,6 @@ type CanvasToolbarProps = {
 	onMode: (mode: EditorMode) => void;
 	/** A template without a canvas calls its first view the body. */
 	hasLayout: boolean;
-	/** A document: its preview is the PDF it prints as, and it has no HTML view. */
-	printed?: boolean;
 	inputCount: number;
 	/** Whether the list of keyboard shortcuts is open over the toolbar. */
 	help: boolean;
@@ -270,7 +268,6 @@ export function CanvasToolbar({
 	mode,
 	onMode,
 	hasLayout,
-	printed = false,
 	inputCount,
 	help,
 	onHelp,
@@ -311,14 +308,12 @@ export function CanvasToolbar({
 							onClick={() => onMode("canvas")}
 						/>
 						<ModeButton
-							label={printed ? "The PDF it prints as" : "The message as it will be sent"}
+							label="The message as it will be sent"
 							icon="visible"
 							active={mode === "preview"}
 							onClick={() => onMode("preview")}
 						/>
-						{printed ? null : (
-							<ModeButton label="The HTML under it" icon="view-code" active={mode === "code"} onClick={() => onMode("code")} />
-						)}
+						<ModeButton label="The HTML under it" icon="view-code" active={mode === "code"} onClick={() => onMode("code")} />
 						<ModeButton
 							label="What this template asks for"
 							icon="list"

@@ -3,6 +3,7 @@ import type { ClientEmail, ClientSummary } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { messageOf } from "../../lib/errors";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type LinkClientDialogProps = {
 	threadId: string;
@@ -148,7 +149,7 @@ export function LinkClientDialog({ threadId, currentClientId, senderAddress, onC
 			) : null}
 			<ul className="mt-3 max-h-[320px] overflow-y-auto">
 				{clients === null ? (
-					<li className="px-3 py-2 text-[var(--ink-muted)]">Loading.</li>
+					<li><RowsSkeleton rows={4} divided={false} trailing={false} /></li>
 				) : clients.length === 0 ? (
 					<li className="px-3 py-2 text-[var(--ink-muted)]">No clients match.</li>
 				) : (

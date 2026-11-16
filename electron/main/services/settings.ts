@@ -160,7 +160,6 @@ const DEFAULTS: AppSettings = {
 	seedVersion: 0,
 	mailTemplateSeedVersion: 0,
 	mailBlockSeedVersion: 0,
-	documentTemplateSeedVersion: 0,
 	signaturePath: null,
 	documentsFolder: null,
 	accountingTool: DEFAULT_ACCOUNTING,
@@ -342,10 +341,6 @@ function normalise(raw: unknown): AppSettings {
 		seedVersion: Math.max(0, int(raw.seedVersion, DEFAULTS.seedVersion)),
 		mailTemplateSeedVersion: Math.max(0, int(raw.mailTemplateSeedVersion, DEFAULTS.mailTemplateSeedVersion)),
 		mailBlockSeedVersion: Math.max(0, int(raw.mailBlockSeedVersion, DEFAULTS.mailBlockSeedVersion)),
-		documentTemplateSeedVersion: Math.max(
-			0,
-			int(raw.documentTemplateSeedVersion, DEFAULTS.documentTemplateSeedVersion),
-		),
 		signaturePath: typeof raw.signaturePath === "string" && raw.signaturePath ? raw.signaturePath : null,
 		documentsFolder: typeof raw.documentsFolder === "string" && raw.documentsFolder ? raw.documentsFolder : null,
 		lastNotifiedOn:
@@ -810,15 +805,6 @@ export async function getMailBlockSeedVersion(): Promise<number> {
 
 export async function setMailBlockSeedVersion(version: number): Promise<number> {
 	return write({ ...read(), mailBlockSeedVersion: Math.max(0, Math.trunc(version)) }).mailBlockSeedVersion;
-}
-
-export async function getDocumentTemplateSeedVersion(): Promise<number> {
-	return read().documentTemplateSeedVersion;
-}
-
-export async function setDocumentTemplateSeedVersion(version: number): Promise<number> {
-	return write({ ...read(), documentTemplateSeedVersion: Math.max(0, Math.trunc(version)) })
-		.documentTemplateSeedVersion;
 }
 
 export async function getOnboarding(): Promise<OnboardingState> {

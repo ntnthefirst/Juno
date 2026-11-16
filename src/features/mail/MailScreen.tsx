@@ -21,7 +21,7 @@ import { SPECIAL_LABELS } from "./folder-tree";
 import { messageOf } from "../../lib/errors";
 import { withAll } from "../../lib/select-all";
 import { useRecentTouch } from "../../lib/use-recent-touch";
-import { useScreenAction } from "../../lib/screen-actions";
+import { useLiveScreenAction, useScreenAction, type ScreenAction } from "../../lib/screen-actions";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { BlocksPage } from "./blocks/BlocksPage";
 import type { ManageTarget } from "./blocks/BlockMenu";
@@ -30,7 +30,7 @@ import { FolderFormPage, type FolderFormTarget } from "./FolderFormPage";
 import { FolderNav, type FolderAction, type NavSelection } from "./FolderNav";
 import { describeMailFileResult } from "./format";
 import { onDraftOffered, takeOfferedDraft } from "../../lib/open-draft";
-import { clearPending, peekPending } from "../../lib/open-entity";
+import { clearPending, onOpenRequest, peekPending, type OpenTarget } from "../../lib/open-entity";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { NO_FILTERS, type MailFilters } from "./mail-filters";
 import { MoveToFolderDialog } from "./MoveToFolderDialog";
@@ -40,6 +40,7 @@ import { ThreadToolbar } from "./ThreadToolbar";
 import { MailStatusBar } from "./MailStatusBar";
 import { StyledMailPane } from "./StyledMailPane";
 import { ThreadView } from "./ThreadView";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type LinkTarget = { threadId: string; currentClientId: string | null; senderAddress: string | null };
 
@@ -61,6 +62,12 @@ type Opened =
 			opens: number;
 	  }
 	| { kind: "outbox"; id: string };
+
+/** What the composer starts from when a new message to an address was asked for elsewhere. */
+function composeSeedOf(request: Extract<OpenTarget, { kind: "compose" }> | null): ComposeSeed | null {
+	if (!request) return null;
+	return { to: request.to, clientId: request.clientId ?? null, projectId: request.projectId ?? null };
+}
 
 /** The widest horizon mail-accounts.ts accepts, which is ten years of mail. */
 const EVERYTHING_DAYS = 3650;
@@ -86,6 +93,7 @@ const MAX_ROWS = 500;
 export function MailScreen() {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [folders, setFolders] = useState<Record<string, MailFolder[]>>({});
+	const [draftCounts, setDraftCounts] = useState<Record<string, number>>({});
 	const [selection, setSelection] = useState<NavSelection | null>(null);
 	const [search, setSearch] = useState("");
 	const [filters, setFilters] = useState<MailFilters>(NO_FILTERS);
@@ -104,7 +112,12 @@ export function MailScreen() {
 	// going back closes the reader but leaves the row you read marked, so it
 	// stays clear which one that was.
 	const [readerOpen, setReaderOpen] = useState(() => peekPending("thread") !== null);
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
@@ -126,10 +139,10 @@ export function MailScreen() {
 	);
 	const [online, setOnline] = useState(() => navigator.onLine);
 	const [outboxCounts, setOutboxCounts] = useState<MailOutboxCounts | null>(null);
-	const [compose, setCompose] = useState<ComposeSeed | null>(null);
+	// An address pressed anywhere else arrives as a request for a new message to it.
+	const [compose, setCompose] = useState<ComposeSeed | null>(() => composeSeedOf(peekPending("compose")));
 	// The page for intros and outros, and what to reopen when it is left.
 	const [blocksPage, setBlocksPage] = useState<{ target: ManageTarget; returnTo: ComposeSeed | null } | null>(null);
-	useScreenAction("mail", () => setCompose({}));
 	const [accountsVersion, setAccountsVersion] = useState(0);
 	const [outboxVersion, setOutboxVersion] = useState(0);
 	const [deleteConfirm, setDeleteConfirm] = useState<string[] | null>(null);
@@ -141,6 +154,9 @@ export function MailScreen() {
 	const [folderDelete, setFolderDelete] = useState<MailFolder | null>(null);
 	const [folderEmpty, setFolderEmpty] = useState<MailFolder | null>(null);
 	const [folderBusy, setFolderBusy] = useState(false);
+	// An unsent message waiting for a yes to its deletion, from the list or the detail.
+	const [outboxDelete, setOutboxDelete] = useState<MailOutboxMessage | null>(null);
+	const [outboxDeleteBusy, setOutboxDeleteBusy] = useState(false);
 	// A right click on the list where there is no row: what the list as a whole can do.
 	// The styled mail column on the right. Remembered for the session, so coming
 	// back to Mail finds it the way it was left.
@@ -158,11 +174,80 @@ export function MailScreen() {
 			// Without storage it only lasts until the screen changes.
 		}
 	}, [stylesOpen]);
+	// The composer and the styled mail column both close on Escape. With both
+	// open, one press closes the one on top: the last one opened, or the one
+	// the keyboard went into after that.
+	// What Mail's New menu asks for. While Mail is on show it acts where it is, so
+	// the conversation being read stays open; brought up fresh, it acts once it
+	// has mounted. Both need an account for a folder or a rule: the one in view,
+	// or the first, read from the service when the list has not arrived yet.
+	function runNew(action: ScreenAction): boolean {
+		const withAccount = (then: (accountId: string) => void, none: () => void) => {
+			const known = selection?.accountId ?? accounts?.[0]?.id;
+			if (known) return then(known);
+			void window.juno.mail.accounts
+				.list()
+				.then((list) => (list[0] ? then(list[0].id) : none()))
+				.catch(none);
+		};
+		switch (action) {
+			case "new":
+				setCompose({ accountId: selection?.accountId ?? accounts?.[0]?.id });
+				return true;
+			case "styled-mail":
+				setStylesOpen(true);
+				return true;
+			case "new-folder":
+				withAccount(
+					(accountId) => setFolderForm({ mode: "create", accountId, parent: null }),
+					() => void window.juno.window.openSettings("mail"),
+				);
+				return true;
+			case "new-rule":
+				withAccount(
+					(accountId) => void window.juno.window.openSettings("mail", { kind: "new-rule", accountId }),
+					() => void window.juno.window.openSettings("mail"),
+				);
+				return true;
+			case "new-block":
+				setBlocksPage({ target: null, returnTo: null });
+				return true;
+			default:
+				return false;
+		}
+	}
+	useScreenAction("mail", (action) => void runNew(action));
+	useLiveScreenAction("mail", runNew);
+	const [front, setFront] = useState<"compose" | "styles">("compose");
+	const [seenOpen, setSeenOpen] = useState({ compose: false, styles: stylesOpen });
+	if (seenOpen.compose !== (compose !== null) || seenOpen.styles !== stylesOpen) {
+		if (compose !== null && !seenOpen.compose) setFront("compose");
+		else if (stylesOpen && !seenOpen.styles) setFront("styles");
+		setSeenOpen({ compose: compose !== null, styles: stylesOpen });
+	}
+	const bothOpen = compose !== null && stylesOpen;
 	const openCount = useRef(1);
 	const composeOpen = useRef(false);
 	useEffect(() => {
 		composeOpen.current = compose !== null;
 	}, [compose]);
+
+	// A new message asked for while Mail is already open: the shell leaves the
+	// screen as it is, so the conversation being read is still there afterwards.
+	useEffect(
+		() =>
+			onOpenRequest(() => {
+				const seed = composeSeedOf(peekPending("compose"));
+				if (!seed) return;
+				clearPending();
+				if (composeOpen.current) {
+					setNotice("Finish or close the message you are writing first.");
+					return;
+				}
+				setCompose(seed);
+			}),
+		[setNotice],
+	);
 
 	// A draft an agent wrote opens in the editor, like one a person started. If
 	// a message is already being written it is left alone, since the draft is
@@ -186,19 +271,22 @@ export function MailScreen() {
 	const loadAccounts = useCallback(async () => {
 		const list = await window.juno.mail.accounts.list();
 		const byAccount: Record<string, MailFolder[]> = {};
+		const drafts: Record<string, number> = {};
 		for (const account of list) {
 			byAccount[account.id] = await window.juno.mail.folders.list(account.id);
+			drafts[account.id] = await window.juno.mail.threads.countDrafts(account.id);
 		}
-		return { list, byAccount };
+		return { list, byAccount, drafts };
 	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
 		loadAccounts()
-			.then(({ list, byAccount }) => {
+			.then(({ list, byAccount, drafts }) => {
 				if (cancelled) return;
 				setAccounts(list);
 				setFolders(byAccount);
+				setDraftCounts(drafts);
 				setSelection((current) => {
 					if (current && list.some((a) => a.id === current.accountId)) return current;
 					if (list.length === 0) return null;
@@ -391,7 +479,7 @@ export function MailScreen() {
 				// Everything not sent yet. A sent message already has its place in
 				// Sent once it syncs, so it drops out of this list rather than
 				// doubling up.
-				states: ["draft", "pending", "queued", "sending", "failed", "cancelled"],
+				states: ["draft", "pending", "queued", "sending", "failed"],
 				limit: 200,
 			})
 			.then((rows) => {
@@ -805,14 +893,43 @@ export function MailScreen() {
 		}
 	}
 
-	/** Sends a failed message again, or stops one that has not gone yet. */
-	async function outboxStep(step: "retry" | "cancel", id: string) {
+	/** Sends a failed message again. */
+	async function retryOutbox(id: string) {
 		try {
-			await window.juno.mail.outbox[step](id);
+			await window.juno.mail.outbox.retry(id);
 			setOutboxVersion((v) => v + 1);
-			say(step === "retry" ? "Sending again." : "Sending cancelled.");
+			say("Sending again.");
 		} catch (cause: unknown) {
 			say(messageOf(cause));
+		}
+	}
+
+	/** Opens a message in the editor. One that is waiting or failed goes back to a draft first. */
+	async function editOutbox(message: MailOutboxMessage) {
+		try {
+			const draft = message.state === "draft" ? message : await window.juno.mail.outbox.returnToDraft(message.id);
+			setOutboxVersion((v) => v + 1);
+			setCompose({ draft });
+		} catch (cause: unknown) {
+			say(messageOf(cause));
+		}
+	}
+
+	async function confirmOutboxDelete() {
+		if (!outboxDelete) return;
+		setOutboxDeleteBusy(true);
+		try {
+			await window.juno.mail.outbox.remove(outboxDelete.id);
+			// Deleting from the list's menu leaves a conversation open beside it alone.
+			const removed = outboxDelete.id;
+			setOpened((current) => (current?.kind === "outbox" && current.id === removed ? null : current));
+			setOutboxVersion((v) => v + 1);
+			say("Message deleted.");
+		} catch (cause: unknown) {
+			say(messageOf(cause));
+		} finally {
+			setOutboxDeleteBusy(false);
+			setOutboxDelete(null);
 		}
 	}
 
@@ -854,7 +971,7 @@ export function MailScreen() {
 	if (accounts === null) {
 		return (
 			<div className="p-8">
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={10} avatar label="Loading your mail" />
 			</div>
 		);
 	}
@@ -862,7 +979,6 @@ export function MailScreen() {
 	if (accounts.length === 0) {
 		return (
 			<div className="p-8">
-				<h1 className="text-h1">Mail</h1>
 				<EmptyState
 					icon="mail"
 					title="No mail accounts yet"
@@ -939,6 +1055,7 @@ export function MailScreen() {
 					type="button"
 					onClick={() => setStylesOpen((open) => !open)}
 					aria-pressed={stylesOpen}
+					data-styled-mail
 					className={[
 						"inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-dense font-[var(--weight-medium)] transition-[color,background-color,transform] duration-[var(--duration-fast)] ease-[var(--ease)] active:scale-[0.97]",
 						stylesOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]",
@@ -958,6 +1075,7 @@ export function MailScreen() {
 					<FolderNav
 						accounts={accounts}
 						folders={folders}
+						draftCounts={draftCounts}
 						sync={sync}
 						selection={selection}
 						onSelect={(next) => {
@@ -994,10 +1112,14 @@ export function MailScreen() {
 				/>
 			</div>
 
-			<div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]">
+			<div
+				className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--line)]"
+				onFocus={compose ? () => setFront("compose") : undefined}
+			>
 				{compose ? (
 					<ComposePage
 						seed={compose}
+						escapeCloses={!bothOpen || front === "compose"}
 						onManage={(draft, target) => {
 							setBlocksPage({ target, returnTo: draft ? { draft } : compose });
 							setCompose(null);
@@ -1032,7 +1154,7 @@ export function MailScreen() {
 						messageId={opened?.kind === "thread" ? opened.messageId : null}
 						onBack={() => setReaderOpen(false)}
 						onChanged={() => setAccountsVersion((v) => v + 1)}
-						onNotice={setNotice}
+						onNotice={say}
 						onReply={(messageId, mode) => void reply(messageId, mode)}
 						onEditDraft={(id) => void editOutgoing(id)}
 						onReplyOutgoing={(id, mode) => void replyOutgoing(id, mode)}
@@ -1041,7 +1163,8 @@ export function MailScreen() {
 					<OutboxDetail
 						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
 						message={selectedOutbox}
-						onEdit={(draft) => setCompose({ draft })}
+						onEdit={(message) => void editOutbox(message)}
+						onDelete={setOutboxDelete}
 						onChanged={() => setOutboxVersion((v) => v + 1)}
 						onNotice={setNotice}
 					/>
@@ -1098,8 +1221,15 @@ export function MailScreen() {
 													if (row?.state === "draft" || row?.state === "pending") setCompose({ draft: row });
 													else setOpened({ kind: "outbox", id });
 												},
-												onRetry: (id: string) => void outboxStep("retry", id),
-												onCancel: (id: string) => void outboxStep("cancel", id),
+												onRetry: (id: string) => void retryOutbox(id),
+												onEdit: (id: string) => {
+													const row = outboxRows?.find((m) => m.id === id);
+													if (row) void editOutbox(row);
+												},
+												onDelete: (id: string) => {
+													const row = outboxRows?.find((m) => m.id === id);
+													if (row) setOutboxDelete(row);
+												},
 											},
 										}
 									: {})}
@@ -1140,13 +1270,36 @@ export function MailScreen() {
 			</div>
 
 			{stylesOpen ? (
-				<StyledMailPane
-					onClose={() => setStylesOpen(false)}
-					onSent={() => {
-						setNotice("Message queued.");
-						setOutboxVersion((v) => v + 1);
-					}}
-				/>
+				// `contents` keeps the column a child of the row for layout while
+				// still hearing focus move into it.
+				<div className="contents" onFocus={() => setFront("styles")}>
+					<StyledMailPane
+						escapeCloses={!bothOpen || front === "styles"}
+						onClose={() => setStylesOpen(false)}
+						onSent={() => {
+							setNotice("Message queued.");
+							setOutboxVersion((v) => v + 1);
+						}}
+					/>
+				</div>
+			) : null}
+
+			{outboxDelete ? (
+				<Dialog
+					title="Delete message"
+					onClose={() => (!outboxDeleteBusy ? setOutboxDelete(null) : undefined)}
+					width="narrow"
+				>
+					<p className="mt-4 text-[var(--ink-muted)]">Delete this message? It will not be sent.</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button disabled={outboxDeleteBusy} onClick={() => setOutboxDelete(null)}>
+							Keep
+						</Button>
+						<Button variant="danger" disabled={outboxDeleteBusy} onClick={() => void confirmOutboxDelete()}>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 
 			{deleteConfirm ? (

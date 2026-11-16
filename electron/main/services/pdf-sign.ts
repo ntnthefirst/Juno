@@ -49,7 +49,8 @@ export interface SignOptions {
 	signerRole?: string | null;
 	signedAt: string;
 	documentTitle: string;
-	templateName: string;
+	/** Recorded in the audit only. Null since templates were removed (decision 82). */
+	templateName: string | null;
 	templateVersion: number | null;
 	isSpecimen: boolean;
 	placement?: StampPlacement;
@@ -158,7 +159,9 @@ async function certificatePdf(options: SignOptions, facts: CertificateFacts): Pr
 	const who = `${options.signerName}${options.signerRole ? `, ${options.signerRole}` : ""}`;
 	line("Ondertekeningsgegevens", 13, true, 26);
 	line(`Document: ${options.documentTitle}`);
-	line(`Sjabloon: ${options.templateName}${options.templateVersion ? ` (versie ${options.templateVersion})` : ""}`);
+	if (options.templateName) {
+		line(`Sjabloon: ${options.templateName}${options.templateVersion ? ` (versie ${options.templateVersion})` : ""}`);
+	}
 	line(`Ondertekenaar: ${who}`);
 	line(`Tijdstip: ${formatDateTime(options.signedAt)}`);
 	line(`Tijdstip (UTC, exact): ${options.signedAt}`, 8);

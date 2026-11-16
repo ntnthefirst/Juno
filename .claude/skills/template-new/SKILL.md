@@ -1,9 +1,14 @@
 ---
 name: template-new
-description: Add a document or email template to Juno - a .docx contract with docxtemplater placeholders, or an HTML email template. Covers placeholder naming, which client fields are actually available, the Dutch-language requirement for anything a client sees, and rendering a preview before a template is ever used on a real document or sent. Use when the user says "add a contract template", "I need an email template for X", "the offer letter should be a template".
+description: Add a mail template to Juno (Styled mail) - an HTML or canvas message that fills in its own declared inputs. Covers placeholder naming, the Dutch-language requirement for anything a client sees, and previewing before a template is ever sent. Document templates no longer exist (decision 82), so a contract is written in Word or as a page and kept as a document. Use when the user says "I need an email template for X", "the reminder mail should be a template".
 ---
 
 # Workflow: a new template
+
+**Document templates were removed (decision 82).** Only mail templates exist.
+What this file says about `.docx` contracts and document templates is history:
+a contract is now written in Word or as a page and kept as a document on a
+client's Documents tab or in Files. Follow the email parts.
 
 **Follow [CLAUDE.md](../../../CLAUDE.md) and [.claude/rules/](../../rules/)
 throughout, [writing.md](../../rules/writing.md) in particular.** This file is

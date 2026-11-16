@@ -69,7 +69,9 @@ export function FormPage({
 	// this is a convenience rather than the only way out.
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
+			// Something inside took this Escape for itself (a list of suggestions
+			// closing, a search clearing), so it is not a request to leave.
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			// Not while a select is open or a confirmation is over the top of this.
 			if (document.querySelector("[role='dialog']")) return;
 			onBack();
@@ -82,7 +84,9 @@ export function FormPage({
 	const current = sequence ? steps[Math.min(step, steps.length - 1)] : undefined;
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
+		// Marked so a window that closes on Escape (Settings) leaves the key to
+		// this page, which steps back to where it was opened from instead.
+		<div data-form-page className="flex h-full min-h-0 flex-col">
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-6">
 				<div className={`animate-rise mx-auto w-full ${measure}`}>
 					<header className="mb-4 flex flex-col items-start gap-2">

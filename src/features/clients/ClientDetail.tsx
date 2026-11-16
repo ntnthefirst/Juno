@@ -1,7 +1,7 @@
 import { IconButton } from "../../components/IconButton";
 import { Tabs, type TabItem } from "../../components/Tabs";
 import { ScheduleSection } from "../calendar/ScheduleSection";
-import type { ScheduleForm } from "../calendar/schedule-form";
+import { editScheduleForm, type ScheduleForm } from "../calendar/schedule-form";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Client,
@@ -30,13 +30,17 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon, type IconName } from "../../components/Icon";
 import { InlineNotes } from "../../components/InlineNotes";
+import { RecordLink } from "../../components/RecordLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import type { DocumentTakeoverRequest } from "../documents/DocumentTakeover";
+import { messageOf } from "../../lib/errors";
 import { openNewRecord } from "../../lib/new-record";
 import { requestOpen } from "../../lib/open-entity";
 import { statusTextClass } from "../../lib/status-tone";
 import { useContextMenu } from "../../lib/use-context-menu";
+import { RecordSkeleton } from "../../components/RecordSkeleton";
 
 /** A non-breaking space, so an amount never wraps between its thousands. */
 const NBSP = String.fromCharCode(0xa0);
@@ -112,10 +116,6 @@ function StatusName({ name }: StatusNameProps) {
 	return <span className={statusTextClass(name?.tone ?? null)}>{name?.label ?? "No status"}</span>;
 }
 
-function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 type Detail = {
 	client: Client;
 	status: ReferenceItem | null;
@@ -162,6 +162,8 @@ type ClientDetailProps = {
 	onDelete: (client: Client) => void;
 	/** Opens the composer addressed to this client. */
 	onSendMail: (client: Client) => void;
+	/** Opens the composer addressed to one of the client's addresses. */
+	onMailTo: (address: string) => void;
 	/** The main process changed the client (archived it), so what is on screen is stale. */
 	onChanged: (message: string | undefined) => void;
 	/**
@@ -184,20 +186,31 @@ type ClientDetailProps = {
 	onEditLink: (link: ClientLink | null) => void;
 	/** `initialKind` only matters when `note` is null, for "Log a call". */
 	onEditNote: (note: ClientNote | null, initialKind?: ClientNoteKind) => void;
-	/** A document from a template is a page of its own, so the screen owns it. */
-	onGenerateDocument: () => void;
-	onOpenDocument: (id: string, title: string) => void;
+	/** A document asked for from elsewhere, previewed on the Documents tab once it is in. */
+	openDocumentId?: string | null;
+	onOpenedDocument?: () => void;
+	/** Signing, sending or writing a page, which the screen shows in place of the client. */
+	onDocumentTakeover: (request: DocumentTakeoverRequest) => void;
 	/** The tab to open on, for coming back from a page that started from one. */
 	initialTab?: TabId;
 	/** Reported so the screen can hand the same tab back after a remount. */
 	onTabChange?: (tab: TabId) => void;
+	/**
+	 * Raised by the screen when something changed the client from outside this
+	 * pane (a side panel, a new-record window). The record is read again in
+	 * place rather than remounted, so the page does not drop to a placeholder and
+	 * lose its scroll on every edit.
+	 */
+	version?: number;
 };
 
 export function ClientDetail({
+	version = 0,
 	clientId,
 	onEdit,
 	onDelete,
 	onSendMail,
+	onMailTo,
 	onChanged,
 	onEditContact,
 	onEditProject,
@@ -207,8 +220,9 @@ export function ClientDetail({
 	onEditAddress,
 	onEditLink,
 	onEditNote,
-	onGenerateDocument,
-	onOpenDocument,
+	openDocumentId = null,
+	onOpenedDocument,
+	onDocumentTakeover,
 	initialTab = "overview",
 	onTabChange,
 }: ClientDetailProps) {
@@ -260,7 +274,7 @@ export function ClientDetail({
 				setLoad(
 					detail
 						? { status: "ready", detail }
-						: { status: "error", message: "This client is no longer in your juno." },
+						: { status: "error", message: "It was deleted. Go back to the list to open another." },
 				);
 			})
 			.catch((cause: unknown) => {
@@ -284,6 +298,13 @@ export function ClientDetail({
 				}),
 		[fetchDetail],
 	);
+
+	const seenVersion = useRef(version);
+	useEffect(() => {
+		if (seenVersion.current === version) return;
+		seenVersion.current = version;
+		void refresh();
+	}, [version, refresh]);
 
 	// The notes are written as they are typed, so the copy held here is brought
 	// up to date without reading the record again: a reload would put the stored
@@ -358,6 +379,38 @@ export function ClientDetail({
 		}
 	}
 
+	/**
+	 * A timeline entry opens what it stands for, the same way it opens anywhere
+	 * else: a date or a reminder in the form page the schedule list uses, a note
+	 * in its panel, the rest on their own screens.
+	 */
+	async function openEntry(entry: ClientTimelineEntry) {
+		try {
+			switch (entry.kind) {
+				case "project":
+					requestOpen({ kind: "project", id: entry.entityId, name: entry.title });
+					return;
+				case "document":
+					requestOpen({ kind: "document", id: entry.entityId, name: entry.title });
+					return;
+				case "mail":
+					requestOpen({ kind: "thread", id: entry.entityId, messageId: null });
+					return;
+				case "event":
+				case "reminder":
+					onSchedule(await editScheduleForm({ kind: entry.kind, id: entry.entityId }));
+					return;
+				case "note":
+					await editNoteEntry(entry);
+					return;
+				case "status":
+					return;
+			}
+		} catch (cause: unknown) {
+			setLoad({ status: "error", message: messageOf(cause) });
+		}
+	}
+
 	async function loadMoreEntries() {
 		if (load.status !== "ready" || loadingMore) return;
 		const oldest = load.detail.entries[load.detail.entries.length - 1];
@@ -388,7 +441,7 @@ export function ClientDetail({
 		}
 	}
 
-	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (load.status === "loading") return <RecordSkeleton label="Loading the client" />;
 
 	if (load.status === "error") {
 		return (
@@ -489,15 +542,10 @@ export function ClientDetail({
 							{primaryEmail ? (
 								<div className="flex min-w-0 items-center gap-2">
 									<Icon name="mail" className="shrink-0 text-[var(--ink-muted)]" />
-									<a
-										data-selectable
-										href={`mailto:${primaryEmail.email}`}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="min-w-0 truncate text-[var(--accent)] hover:text-[var(--accent-hover)]"
-									>
+									{/* A new message from Juno, not the system's mail program. */}
+									<RecordLink label={`Write to ${primaryEmail.email}`} onOpen={() => onMailTo(primaryEmail.email)}>
 										{primaryEmail.email}
-									</a>
+									</RecordLink>
 								</div>
 							) : null}
 							{primaryPhone ? (
@@ -548,6 +596,7 @@ export function ClientDetail({
 								onEditEmail={onEditEmail}
 								onEditPhone={onEditPhone}
 								onEditLink={onEditLink}
+								onMailTo={onMailTo}
 								onRemove={setPending}
 							/>
 							<ContactsSection
@@ -590,9 +639,11 @@ export function ClientDetail({
 												<button
 													type="button"
 													onClick={() => requestOpen({ kind: "project", id: project.id, name: project.name })}
-													className="min-w-0 flex-1 text-left"
+													className="group min-w-0 flex-1 rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 												>
-													<span className="block truncate text-base font-[var(--weight-medium)]">{project.name}</span>
+													<span className="block truncate text-base font-[var(--weight-medium)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] group-hover:text-[var(--accent)]">
+														{project.name}
+													</span>
 													{project.dueOn ? (
 														<span className="tabular block text-sm text-[var(--ink-muted)]">Due {formatDate(project.dueOn)}</span>
 													) : null}
@@ -616,6 +667,7 @@ export function ClientDetail({
 						onAddNote={() => onEditNote(null)}
 						onEditNote={(entry) => void editNoteEntry(entry)}
 						onRemoveNote={(entry) => setPending({ kind: "note", id: entry.entityId, name: entry.title })}
+						onOpen={(entry) => void openEntry(entry)}
 					/>
 				) : tab === "projects" ? (
 					<ProjectsSection
@@ -628,9 +680,10 @@ export function ClientDetail({
 					<DocumentsPanel
 						scope={{ clientId }}
 						name={client.name}
-						onGenerate={onGenerateDocument}
-						onOpen={onOpenDocument}
+						openDocumentId={openDocumentId}
+						onOpenedDocument={onOpenedDocument}
 						onChanged={refresh}
+						onTakeOver={onDocumentTakeover}
 					/>
 				) : (
 					<ClientMail
@@ -901,6 +954,8 @@ type TimelineTabProps = {
 	onAddNote: () => void;
 	onEditNote: (entry: ClientTimelineEntry) => void;
 	onRemoveNote: (entry: ClientTimelineEntry) => void;
+	/** Opens the record an entry stands for: its project, document, conversation, date, reminder or note. */
+	onOpen: (entry: ClientTimelineEntry) => void;
 };
 
 /**
@@ -918,6 +973,7 @@ function TimelineTab({
 	onAddNote,
 	onEditNote,
 	onRemoveNote,
+	onOpen,
 }: TimelineTabProps) {
 	const { at, open, close } = useContextMenu();
 	const [menuEntry, setMenuEntry] = useState<ClientTimelineEntry | null>(null);
@@ -1012,16 +1068,22 @@ function TimelineTab({
 									/>
 								</div>
 								<div className="min-w-0 flex-1 pt-2 pb-4">
-									<span data-selectable className="block truncate text-lg">
-										{entry.kind === "status" ? (
-											<>
-												Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
-												<StatusName name={entry.statusChange?.to ?? null} />
-											</>
-										) : (
-											entry.title
-										)}
-									</span>
+									{entry.kind === "status" ? (
+										<span data-selectable className="block truncate text-lg">
+											Status changed from <StatusName name={entry.statusChange?.from ?? null} /> to{" "}
+											<StatusName name={entry.statusChange?.to ?? null} />
+										</span>
+									) : (
+										// Every other entry is a record of its own, and its title opens it.
+										<button
+											type="button"
+											data-opens-panel={entry.kind === "note" ? "" : undefined}
+											onClick={() => onOpen(entry)}
+											className="block max-w-full truncate rounded-[var(--radius-sm)] text-left text-lg transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+										>
+											{entry.title}
+										</button>
+									)}
 									{entry.detail ? (
 										<span data-selectable className="mt-0.5 block truncate text-base text-[var(--ink-muted)]">
 											{entry.detail}

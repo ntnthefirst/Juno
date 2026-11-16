@@ -74,7 +74,11 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 	// edits question is asked it either way rather than only on one path.
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onClose();
+			// A dialog over the panel, or a list inside it, took this Escape first.
+			if (event.key === "Escape" && !event.defaultPrevented) {
+				event.preventDefault();
+				onClose();
+			}
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
@@ -96,9 +100,14 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 	}, [onClose]);
 
 	// Focus moves in so a keyboard reaches the panel's own controls next, rather
-	// than continuing through the screen behind it.
+	// than continuing through the screen behind it, and back to whatever opened
+	// it when it closes, so the keyboard is not left at the top of the window.
 	useEffect(() => {
+		const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		panel.current?.focus();
+		return () => {
+			if (opener?.isConnected) opener.focus();
+		};
 	}, []);
 
 	return (
@@ -112,6 +121,7 @@ export function SidePanel({ title, subtitle, onClose, actions, tools, children }
 				ref={panel}
 				tabIndex={-1}
 				aria-label={title}
+				data-side-panel
 				className="animate-slide absolute inset-y-0 right-0 z-30 flex w-[420px] max-w-full flex-col border-l border-[var(--line)] bg-[var(--surface)] focus:outline-none"
 				style={{ boxShadow: "var(--shadow-panel)" }}
 			>

@@ -20,6 +20,10 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 /** Draws every glyph once, in one colour, as small PNGs the platform menu can show. */
 async function draw(color: string): Promise<MenuIconSet> {
+	// The first call comes from an effect, where React refuses to flush a
+	// second root: the glyphs never rendered, the menus had no pictures until
+	// the theme changed, and the console said why twice. A task later it can.
+	await new Promise((resolve) => window.setTimeout(resolve, 0));
 	const host = document.createElement("div");
 	const root = createRoot(host);
 	flushSync(() => {

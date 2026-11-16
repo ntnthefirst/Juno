@@ -4,12 +4,20 @@ import { MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { shortDay } from "./time-format";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ProjectTimelineProps = {
 	projectId: string;
 	/** Bumped by the page when something it did adds a line, such as a time entry. */
 	version: number;
+	/** A time entry's line opens the Time tab, where entries are changed. */
+	onOpenTime: () => void;
+	/** A folder's line opens the folder. */
+	onOpenFolder: () => void;
 };
+
+/** The lines that stand for something that can be opened. Status changes and "created" only happened. */
+const OPENS: ReadonlySet<ProjectTimelineKind> = new Set(["mail", "quote", "contract", "time", "folder"]);
 
 type Load =
 	| { status: "loading" }
@@ -45,7 +53,7 @@ function monthOf(iso: string): { key: string; label: string } {
  * is read from the records themselves (services/project-timeline.ts), so a line
  * is there as soon as the thing it describes is.
  */
-export function ProjectTimeline({ projectId, version }: ProjectTimelineProps) {
+export function ProjectTimeline({ projectId, version, onOpenTime, onOpenFolder }: ProjectTimelineProps) {
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [hidden, setHidden] = useState<ReadonlySet<ProjectTimelineKind>>(new Set());
 
@@ -91,8 +99,10 @@ export function ProjectTimeline({ projectId, version }: ProjectTimelineProps) {
 	}));
 
 	function open(entry: ProjectTimelineEntry) {
-		if (!entry.entityId) return;
-		if (entry.kind === "mail") requestOpen({ kind: "thread", id: entry.entityId, messageId: null });
+		if (entry.kind === "time") onOpenTime();
+		else if (entry.kind === "folder") onOpenFolder();
+		else if (!entry.entityId) return;
+		else if (entry.kind === "mail") requestOpen({ kind: "thread", id: entry.entityId, messageId: null });
 		else if (entry.kind === "quote" || entry.kind === "contract") {
 			requestOpen({ kind: "document", id: entry.entityId, name: entry.title });
 		}
@@ -106,7 +116,7 @@ export function ProjectTimeline({ projectId, version }: ProjectTimelineProps) {
 			</div>
 
 			{load.status === "loading" ? (
-				<p className="text-sm text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={5} />
 			) : load.status === "error" ? (
 				<p data-selectable className="text-sm text-[var(--risk)]">
 					{load.message}
@@ -126,7 +136,8 @@ export function ProjectTimeline({ projectId, version }: ProjectTimelineProps) {
 							<ol className="mt-3 flex flex-col gap-3">
 								{group.entries.map((entry) => {
 									const dot = KINDS.find((kind) => kind.kind === entry.kind)?.dot ?? "bg-[var(--ink-faint)]";
-									const clickable = entry.entityId !== null && ["mail", "quote", "contract"].includes(entry.kind);
+									const clickable =
+									OPENS.has(entry.kind) && (entry.entityId !== null || entry.kind === "time" || entry.kind === "folder");
 									return (
 										<li key={entry.id} className="relative flex items-start justify-between gap-4">
 											<span
@@ -138,7 +149,7 @@ export function ProjectTimeline({ projectId, version }: ProjectTimelineProps) {
 													<button
 														type="button"
 														onClick={() => open(entry)}
-														className="text-left text-base hover:text-[var(--accent)]"
+														className="rounded-[var(--radius-sm)] text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 													>
 														{entry.title}
 													</button>

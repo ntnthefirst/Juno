@@ -7,6 +7,7 @@ import { ActionMenu } from "../../components/ActionMenu";
 import type { MenuHandlers } from "../../lib/native-menu";
 import { messageOf } from "../../lib/errors";
 import { describeMailFileResult } from "./format";
+import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
 import { LinkClientDialog } from "./LinkClientDialog";
 import { LinkProjectDialog } from "./LinkProjectDialog";
@@ -14,6 +15,7 @@ import { MoveToFolderDialog } from "./MoveToFolderDialog";
 import { MessageView } from "./MessageView";
 import { ConversationPanel, type ThreadEntry } from "./ConversationPanel";
 import { OutgoingMessageView } from "./OutgoingMessageView";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type ThreadViewProps = {
 	threadId: string;
@@ -23,7 +25,7 @@ type ThreadViewProps = {
 	onBack: () => void;
 	/** The thread's link changed, so the list needs a refresh. */
 	onChanged: () => void;
-	onNotice: (message: string) => void;
+	onNotice: (message: string, action?: { label: string; run: () => void }) => void;
 	onReply: (messageId: string, mode: MailReplyMode) => void;
 	/** Opens a draft, a message waiting for approval or a failed send in the composer. */
 	onEditDraft: (outboxId: string) => void;
@@ -204,7 +206,11 @@ export function ThreadView({
 	}
 
 	if (load.status === "loading" || load.threadId !== threadId) {
-		return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
+		return (
+			<div className="p-8">
+				<CardSkeleton lines={6} label="Loading the conversation" />
+			</div>
+		);
 	}
 	if (load.status === "error") {
 		return (
@@ -419,7 +425,17 @@ export function ThreadView({
 				    the conversation panel already shows both. */}
 				{summary.clientName || (summary.projectId && summary.projectName) ? (
 					<div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-[var(--ink-muted)]">
-						{summary.clientName ? (
+						{summary.clientId && summary.clientName ? (
+							<button
+								type="button"
+								onClick={() => requestOpenClient(summary.clientId!, summary.clientName!)}
+								title="Open the client"
+								className="inline-flex min-w-0 items-center gap-1.5 rounded-[var(--radius-sm)] hover:text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+							>
+								<Icon name="client" size={14} className="flex-none" />
+								<span className="truncate">{summary.clientName}</span>
+							</button>
+						) : summary.clientName ? (
 							<span className="inline-flex min-w-0 items-center gap-1.5">
 								<Icon name="client" size={14} className="flex-none" />
 								<span className="truncate">{summary.clientName}</span>
@@ -456,6 +472,7 @@ export function ThreadView({
 								key={selected.message.id}
 								message={selected.message}
 								clientLinked={summary.clientId !== null}
+								clientId={summary.clientId}
 								project={
 									summary.projectId && summary.projectName
 										? { id: summary.projectId, name: summary.projectName }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Client,
 	Project,
@@ -21,17 +21,21 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Tabs, type TabItem } from "../../components/Tabs";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
-import { requestOpen } from "../../lib/open-entity";
+import { RecordLink } from "../../components/RecordLink";
+import { requestOpenClient } from "../../lib/open-client";
 import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { addDays, todayIso } from "../calendar/dates";
 import { openNewRecord } from "../../lib/new-record";
-import type { ScheduleForm } from "../calendar/schedule-form";
+import { editScheduleForm, type ScheduleForm } from "../calendar/schedule-form";
 import { scheduleRows, type ScheduleRow } from "../calendar/schedule-rows";
 import { DocumentsPanel } from "../documents/DocumentsPanel";
+import type { DocumentTakeoverRequest } from "../documents/DocumentTakeover";
 import { LinkedNotes } from "../notes/LinkedNotes";
 import { AssetList } from "./AssetList";
+import { FileQuickLook } from "../../components/FileQuickLook";
+import { fileTypeLabel } from "../../lib/file-type";
 import { CommandPanel } from "./CommandPanel";
-import { formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
+import { formatBytes, formatCents, formatDate, LINK_ICONS, pathTail } from "./format";
 import { LinkMailDialog } from "./LinkMailDialog";
 import { LinkPanel } from "./LinkPanel";
 import { ProjectCalendar } from "./ProjectCalendar";
@@ -43,8 +47,9 @@ import { RunConsole } from "./RunConsole";
 import { StorageDialog } from "./StorageDialog";
 import { dayLabel, formatDuration } from "./time-format";
 import { listAllThreads } from "../../lib/list-all-threads";
+import { RecordSkeleton } from "../../components/RecordSkeleton";
 
-export type ProjectTab = "notes" | "mail" | "timeline" | "time" | "calendar";
+export type ProjectTab = "notes" | "documents" | "mail" | "timeline" | "time" | "calendar";
 
 type ProjectDetailProps = {
 	projectId: string;
@@ -57,12 +62,22 @@ type ProjectDetailProps = {
 	onEdit: (project: Project) => void;
 	/** A date or a reminder is a form, so the screen draws it as a page. */
 	onSchedule: (form: ScheduleForm) => void;
-	/** So is a document from a template. */
-	onGenerateDocument: () => void;
+	/** A document asked for from elsewhere, previewed on the Documents tab once it is in. */
+	openDocumentId?: string | null;
+	onOpenedDocument?: () => void;
+	/** And signing, sending or writing a page of one of its documents. */
+	onDocumentTakeover: (request: DocumentTakeoverRequest) => void;
 	/** And a time entry, new or edited. */
 	onTimeForm: (entry: TimeEntry | null) => void;
 	onNameChange: (name: string) => void;
 	onDeleted: (project: ProjectSummary) => void;
+	/**
+	 * Raised by the screen when something changed the project from outside this
+	 * pane (the edit page, a time entry, a date). The record and the open tab
+	 * are read again in place rather than remounted, so the page keeps its
+	 * scroll and does not drop to a placeholder on every save.
+	 */
+	version?: number;
 };
 
 type Loaded = {
@@ -73,6 +88,7 @@ type Loaded = {
 	assets: ProjectAsset[];
 	commands: ProjectCommand[];
 	threadCount: number;
+	documentCount: number;
 	upcoming: ScheduleRow[];
 	loggedMinutes: number;
 };
@@ -89,11 +105,13 @@ function typingIn(target: EventTarget | null): boolean {
  * One project: what it is, what has happened on it, and what is attached.
  *
  * It takes the whole working area rather than sitting beside the list. The
- * header names it and offers Add and the "..." menu; five tabs hold the rest.
- * Notes is the first, with the details beside it and the places and files
- * below. The trail in the title bar says where you are and how to get back.
+ * header names it and offers Add and the "..." menu; six tabs hold the rest.
+ * Notes is the first, with the details beside it and the links and commands
+ * below. Documents holds its documents and, under them, the project's own
+ * files. The trail in the title bar says where you are and how to get back.
  */
 export function ProjectDetail({
+	version = 0,
 	projectId,
 	tab,
 	onTabChange,
@@ -101,7 +119,9 @@ export function ProjectDetail({
 	onChanged,
 	onEdit,
 	onSchedule,
-	onGenerateDocument,
+	openDocumentId = null,
+	onOpenedDocument,
+	onDocumentTakeover,
 	onTimeForm,
 	onNameChange,
 	onDeleted,
@@ -113,6 +133,8 @@ export function ProjectDetail({
 	const [storageOpen, setStorageOpen] = useState(false);
 	const [linkMailOpen, setLinkMailOpen] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
+	// The project file in the full preview, by id.
+	const [previewAsset, setPreviewAsset] = useState<string | null>(null);
 	// Bumped when a change made here adds to what a tab lists, so the tab reads again.
 	const [tick, setTick] = useState(0);
 
@@ -121,7 +143,7 @@ export function ProjectDetail({
 		if (!project) throw new Error("That project no longer exists.");
 
 		const today = todayIso();
-		const [client, statusSet, links, assets, commands, threads, items, totals] = await Promise.all([
+		const [client, statusSet, links, assets, commands, threads, items, totals, projectDocuments] = await Promise.all([
 			project.clientId ? window.juno.clients.get(project.clientId) : Promise.resolve(null),
 			window.juno.reference.getSet("project_status"),
 			window.juno.projects.links.list(projectId),
@@ -135,6 +157,7 @@ export function ProjectDetail({
 				projectId,
 			}),
 			window.juno.time.total(projectId),
+			window.juno.documents.list({ projectId }),
 		]);
 
 		return {
@@ -148,6 +171,7 @@ export function ProjectDetail({
 			assets,
 			commands,
 			threadCount: threads.length,
+			documentCount: projectDocuments.length,
 			upcoming: scheduleRows(items, today),
 			loggedMinutes: totals.loggedMinutes,
 		};
@@ -170,6 +194,15 @@ export function ProjectDetail({
 	useEffect(() => {
 		reload();
 	}, [reload]);
+
+	// A save made outside this pane reads the record again, and the reload moves
+	// `tick`, which every tab that lists its own rows reads again on.
+	const seenVersion = useRef(version);
+	useEffect(() => {
+		if (seenVersion.current === version) return;
+		seenVersion.current = version;
+		reload();
+	}, [version, reload]);
 
 	// The logged time follows the timer, wherever it was started or stopped.
 	useEffect(() => window.juno.time.onRunningChange(() => reload()), [reload]);
@@ -228,6 +261,13 @@ export function ProjectDetail({
 		void opening.catch((cause: unknown) => setNotice(messageOf(cause)));
 	}
 
+	/** An event linked to the project opens in the same form page its Calendar tab uses. */
+	function openEvent(id: string) {
+		editScheduleForm({ kind: "event", id })
+			.then(onSchedule)
+			.catch((cause: unknown) => setNotice(messageOf(cause)));
+	}
+
 	function removeProject() {
 		if (!data) return;
 		const { project: row, client, status, assets, commands } = data;
@@ -259,7 +299,8 @@ export function ProjectDetail({
 	useEffect(() => {
 		if (!opened) return;
 		function onKey(event: KeyboardEvent) {
-			if (event.defaultPrevented || document.querySelector("[role='dialog']")) return;
+			// Delete in a file preview or a side panel means the thing shown there, not the project.
+			if (event.defaultPrevented || document.querySelector("[role='dialog'], [data-side-panel], [data-full-preview]")) return;
 			if (matchesCombo(event, COMBOS.openFolder)) {
 				event.preventDefault();
 				openFolder();
@@ -273,7 +314,11 @@ export function ProjectDetail({
 	});
 
 	if (load.status === "loading") {
-		return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
+		return (
+			<div className="p-6">
+				<RecordSkeleton shape="square" label="Loading the project" />
+			</div>
+		);
 	}
 	if (load.status === "error" || !data) {
 		return (
@@ -291,15 +336,16 @@ export function ProjectDetail({
 		);
 	}
 
-	const { client, status, links, assets, commands, threadCount, upcoming, loggedMinutes } = data;
+	const { client, status, links, assets, commands, threadCount, documentCount, upcoming, loggedMinutes } = data;
 	const current = data.project;
 	const project = current;
 	const firstCommand = commands[0] ?? null;
 	const runOf = (commandId: string) => runs.find((one) => one.commandId === commandId) ?? null;
-	const nextEvent = upcoming.find((row) => row.kind === "event") ?? null;
+	const nextEvent = upcoming.find((row): row is Extract<ScheduleRow, { kind: "event" }> => row.kind === "event") ?? null;
 
 	const tabs: TabItem<ProjectTab>[] = [
 		{ id: "notes", label: "Notes" },
+		{ id: "documents", label: "Documents", count: documentCount > 0 ? documentCount : null },
 		{ id: "mail", label: "Mail", count: threadCount > 0 ? threadCount : null, countTone: "warn" },
 		{ id: "timeline", label: "Timeline" },
 		{ id: "time", label: "Time" },
@@ -351,9 +397,7 @@ export function ProjectDetail({
 		failed: (message) => setNotice(message),
 	};
 
-	const subtitle = [client ? client.name : "Your own work", current.dueOn ? `due ${formatDate(current.dueOn)}` : null]
-		.filter(Boolean)
-		.join(" · ");
+	const due = current.dueOn ? `due ${formatDate(current.dueOn)}` : null;
 
 	return (
 		<div className="relative h-full overflow-y-auto">
@@ -365,7 +409,16 @@ export function ProjectDetail({
 							<h1 className="text-h2">{current.name}</h1>
 							{status ? <StatusBadge label={status.label} tone={status.tone} /> : null}
 						</div>
-						<p className="mt-1 text-base text-[var(--ink-muted)]">{subtitle}</p>
+						<p className="mt-1 text-base text-[var(--ink-muted)]">
+							{client ? (
+								<RecordLink tone="quiet" onOpen={() => requestOpenClient(client.id, client.name)}>
+									{client.name}
+								</RecordLink>
+							) : (
+								"Your own work"
+							)}
+							{due ? ` · ${due}` : null}
+						</p>
 					</div>
 					<div className="flex flex-none items-center gap-1">
 						<ActionMenu target={{ kind: "add", id: current.id }} handlers={addHandlers} ariaLabel="Add to this project" label="Add" icon="add" />
@@ -388,7 +441,12 @@ export function ProjectDetail({
 						onChanged={() => reload()}
 					/>
 				) : tab === "timeline" ? (
-					<ProjectTimeline projectId={current.id} version={tick} />
+					<ProjectTimeline
+						projectId={current.id}
+						version={tick}
+						onOpenTime={() => onTabChange("time")}
+						onOpenFolder={openFolder}
+					/>
 				) : tab === "time" ? (
 					<ProjectTime
 						projectId={current.id}
@@ -397,6 +455,83 @@ export function ProjectDetail({
 						onEditEntry={(entry) => onTimeForm(entry)}
 						onChanged={() => reload()}
 					/>
+				) : tab === "documents" ? (
+					<DocumentsPanel
+						scope={{ projectId: current.id }}
+						name={current.name}
+						openDocumentId={openDocumentId}
+						onOpenedDocument={onOpenedDocument}
+						onChanged={() => reload()}
+						onTakeOver={onDocumentTakeover}
+					>
+						<section aria-label="Project files" className="mt-8">
+							<SectionHeading
+								action={
+									<div className="flex items-center gap-2">
+										<Button
+											size="dense"
+											onClick={() =>
+												void act(() => window.juno.projects.assets.choose(project.id, "managed"), true)
+											}
+										>
+											<Icon name="add" />
+											Add files
+										</Button>
+										<MenuButton
+											ariaLabel="Other ways to add a file"
+											items={[
+												{
+													id: "link",
+													label: "Link to files, without copying",
+													icon: "link",
+													onSelect: () =>
+														void act(
+															() => window.juno.projects.assets.choose(project.id, "linked"),
+															true,
+														),
+												},
+												{
+													id: "storage",
+													label: "Where the files are kept",
+													icon: "projects",
+													separatorBefore: true,
+													onSelect: () => setStorageOpen(true),
+												},
+											]}
+										/>
+									</div>
+								}
+								as="h3"
+							>
+								Project files
+							</SectionHeading>
+
+							{assets.length === 0 ? (
+								<p className="text-sm text-[var(--ink-muted)]">
+									No project files yet. They are kept in the project's own folder on disk, or linked where
+									they are, which is what a large export wants. Contracts and other documents go in the list above.
+								</p>
+							) : (
+								<AssetList
+									assets={assets}
+									coverAssetId={project.coverAssetId}
+									previews
+									onPreview={(asset) => setPreviewAsset(asset.id)}
+									onOpen={(asset) =>
+										void window.juno.projects.assets.open(asset.id).catch((cause: unknown) => {
+											setNotice(messageOf(cause));
+										})
+									}
+									onSetCover={(asset) =>
+										void act(() => window.juno.projects.setCover(project.id, asset?.id ?? null), true)
+									}
+									onRemove={(asset) =>
+										void act(() => window.juno.projects.assets.remove(asset.id), true)
+									}
+								/>
+							)}
+						</section>
+					</DocumentsPanel>
 				) : tab === "calendar" ? (
 					<ProjectCalendar
 						projectId={current.id}
@@ -429,7 +564,11 @@ export function ProjectDetail({
 									</button>
 								</div>
 								<dl className="mt-3 flex flex-col gap-4">
-									<Detail label="Client" value={client ? client.name : "Your own work"} />
+									<Detail
+										label="Client"
+										value={client ? client.name : "Your own work"}
+										onOpen={client ? () => requestOpenClient(client.id, client.name) : undefined}
+									/>
 									<Detail label="Status" value={status ? status.label : "No status"} />
 									<Detail label="Due date" value={current.dueOn ? formatDate(current.dueOn) : "Not set"} />
 									{current.agreedValueCents !== null ? (
@@ -439,13 +578,19 @@ export function ProjectDetail({
 										<Detail
 											label="Mail"
 											value={threadCount === 0 ? "Nothing linked" : `${threadCount} ${threadCount === 1 ? "thread" : "threads"} linked`}
+											onOpen={threadCount === 0 ? undefined : () => onTabChange("mail")}
 										/>
 									</div>
 									<Detail
 										label="Next event"
 										value={nextEvent ? `${dayLabel(nextEvent.date)}, ${nextEvent.item.title}` : "Nothing planned"}
+										onOpen={nextEvent ? () => openEvent(nextEvent.item.eventId) : undefined}
 									/>
-									<Detail label="Time logged" value={formatDuration(loggedMinutes)} />
+									<Detail
+										label="Time logged"
+										value={formatDuration(loggedMinutes)}
+										onOpen={loggedMinutes > 0 ? () => onTabChange("time") : undefined}
+									/>
 								</dl>
 							</aside>
 						</div>
@@ -469,17 +614,6 @@ export function ProjectDetail({
 								<MarkdownNotes text={current.description} />
 							</section>
 						) : null}
-
-						<div>
-							{/* Opening one goes to the Documents screen, the same as the palette. */}
-							<DocumentsPanel
-								scope={{ projectId: current.id }}
-								name={current.name}
-								onGenerate={onGenerateDocument}
-								onOpen={(id, title) => requestOpen({ kind: "document", id, name: title })}
-								onChanged={() => undefined}
-							/>
-						</div>
 
 						<LinkedNotes projectId={current.id} />
 
@@ -517,7 +651,7 @@ export function ProjectDetail({
 												setNotice(messageOf(cause));
 											})
 										}
-										className="min-w-0 flex-1 truncate text-left text-dense"
+										className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] text-left text-dense text-[var(--accent)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 										title={link.target}
 									>
 										{link.label}
@@ -574,77 +708,6 @@ export function ProjectDetail({
 								</li>
 							))}
 						</ul>
-					)}
-				</section>
-
-				<section>
-					<SectionHeading
-						action={
-							<div className="flex items-center gap-2">
-								<Button
-									size="dense"
-									onClick={() =>
-										void act(() => window.juno.projects.assets.choose(project.id, "managed"), true)
-									}
-								>
-									<Icon name="add" />
-									Add files
-								</Button>
-								<MenuButton
-									ariaLabel="Other ways to add a file"
-									items={[
-										{
-											id: "link",
-											label: "Link to files, without copying",
-											icon: "link",
-											onSelect: () =>
-												void act(
-													() => window.juno.projects.assets.choose(project.id, "linked"),
-													true,
-												),
-										},
-										{
-											id: "storage",
-											label: "Where the files are kept",
-											icon: "projects",
-											separatorBefore: true,
-											onSelect: () => setStorageOpen(true),
-										},
-									]}
-								/>
-							</div>
-						}
-					>
-						Files
-					</SectionHeading>
-
-					{assets.length === 0 ? (
-						<p className="text-sm text-[var(--ink-muted)]">
-							No files yet. Added files are copied into the project's folder. Linked files stay
-							where they are, which is what a large export wants.
-						</p>
-					) : (
-						<AssetList
-							assets={assets}
-							coverAssetId={project.coverAssetId}
-							previews
-							onOpen={(asset) =>
-								void window.juno.projects.assets.open(asset.id).catch((cause: unknown) => {
-									setNotice(messageOf(cause));
-								})
-							}
-							onReveal={(asset) =>
-								void window.juno.projects.assets.reveal(asset.id).catch((cause: unknown) => {
-									setNotice(messageOf(cause));
-								})
-							}
-							onSetCover={(asset) =>
-								void act(() => window.juno.projects.setCover(project.id, asset?.id ?? null), true)
-							}
-							onRemove={(asset) =>
-								void act(() => window.juno.projects.assets.remove(asset.id), true)
-							}
-						/>
 					)}
 				</section>
 
@@ -784,6 +847,37 @@ export function ProjectDetail({
 				/>
 			) : null}
 
+			{previewAsset !== null && assets.some((asset) => asset.id === previewAsset) ? (
+				<FileQuickLook
+					files={assets.map((asset) => ({
+						key: asset.id,
+						name: asset.fileName,
+						meta: [fileTypeLabel(asset.fileName, asset.mimeType ?? ""), formatBytes(asset.byteSize), asset.exists ? "" : "Missing"]
+							.filter(Boolean)
+							.join(" · "),
+						source: { kind: "asset", assetId: asset.id },
+					}))}
+					index={assets.findIndex((asset) => asset.id === previewAsset)}
+					onIndex={(at) => setPreviewAsset(assets[at]?.id ?? null)}
+					onClose={() => setPreviewAsset(null)}
+					closeLabel={`Back to ${current.name}`}
+					onOpen={(file) =>
+						void window.juno.projects.assets.open(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
+					}
+					actions={(file) => (
+						<>
+							<Button
+								size="dense"
+								onClick={() =>
+									void window.juno.projects.assets.open(file.key).catch((cause: unknown) => setNotice(messageOf(cause)))
+								}
+							>
+								Open
+							</Button>
+						</>
+					)}
+				/>
+			) : null}
 			{notice ? <Toast message={notice} onDismiss={() => setNotice(null)} /> : null}
 		</div>
 	);
@@ -813,15 +907,17 @@ function move<T extends { id: string }>(
 type DetailProps = {
 	label: string;
 	value: string;
+	/** Where the value leads: the client, the tab that lists what it counts, the event it names. */
+	onOpen?: () => void;
 };
 
 /** One line of the Details column: a small caps label over its value. */
-function Detail({ label, value }: DetailProps) {
+function Detail({ label, value, onOpen }: DetailProps) {
 	return (
 		<div>
 			<dt className="text-overline uppercase text-[var(--ink-muted)]">{label}</dt>
-			<dd data-selectable className="mt-1 text-base">
-				{value}
+			<dd data-selectable={onOpen ? undefined : true} className="mt-1 text-base">
+				{onOpen ? <RecordLink onOpen={onOpen}>{value}</RecordLink> : value}
 			</dd>
 		</div>
 	);
@@ -830,12 +926,14 @@ function Detail({ label, value }: DetailProps) {
 type SectionHeadingProps = {
 	children: string;
 	action?: React.ReactNode;
+	/** h3 for a section inside another, such as the files under a project's documents. */
+	as?: "h2" | "h3";
 };
 
-function SectionHeading({ children, action }: SectionHeadingProps) {
+function SectionHeading({ children, action, as: Heading = "h2" }: SectionHeadingProps) {
 	return (
 		<div className="mb-2 flex items-center justify-between gap-4">
-			<h2 className="text-h3">{children}</h2>
+			<Heading className="text-h3">{children}</Heading>
 			{action}
 		</div>
 	);

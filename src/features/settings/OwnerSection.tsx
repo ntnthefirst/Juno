@@ -5,6 +5,7 @@ import { Field } from "../../components/Field";
 import { messageOf } from "../../lib/errors";
 import { OwnerContactList } from "./OwnerContacts";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type OwnerSectionProps = {
 	/**
@@ -38,6 +39,8 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 	const [profile, setProfile] = useState<OwnerProfile | null>(null);
 	const [mailAccounts, setMailAccounts] = useState<MailAccount[] | null>(null);
 	const [detailsError, setDetailsError] = useState<string | null>(null);
+	// A first read that failed, said on whichever page is open instead of a skeleton that never resolves.
+	const [loadError, setLoadError] = useState<string | null>(null);
 	const [emailsError, setEmailsError] = useState<string | null>(null);
 	const [phonesError, setPhonesError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -50,7 +53,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 				if (!cancelled) setProfile(value);
 			})
 			.catch((cause: unknown) => {
-				if (!cancelled) setDetailsError(messageOf(cause));
+				if (!cancelled) setLoadError(messageOf(cause));
 			});
 		// A mail account this address matches is shown as a quiet hint below. If
 		// this fails to load, the hint is just missing; it is not worth its own
@@ -85,23 +88,28 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 		}
 	}
 
-	async function applyEmail(action: () => Promise<OwnerProfile>, message?: string) {
+	// True when it was saved, so the field that asked keeps a refused value to put right.
+	async function applyEmail(action: () => Promise<OwnerProfile>, message?: string): Promise<boolean> {
 		setEmailsError(null);
 		try {
 			setProfile(await action());
 			if (message) onSaved(message);
+			return true;
 		} catch (cause: unknown) {
 			setEmailsError(messageOf(cause));
+			return false;
 		}
 	}
 
-	async function applyPhone(action: () => Promise<OwnerProfile>, message?: string) {
+	async function applyPhone(action: () => Promise<OwnerProfile>, message?: string): Promise<boolean> {
 		setPhonesError(null);
 		try {
 			setProfile(await action());
 			if (message) onSaved(message);
+			return true;
 		} catch (cause: unknown) {
 			setPhonesError(messageOf(cause));
+			return false;
 		}
 	}
 
@@ -121,7 +129,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 					}
 				>
 					{profile === null ? (
-						<p className="text-[var(--ink-muted)]">Loading.</p>
+						loadError ? null : <CardSkeleton lines={3} framed={false} />
 					) : (
 						<div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-6">
 							{FIELDS.map((field) => (
@@ -136,7 +144,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 							))}
 						</div>
 					)}
-					<SectionError message={detailsError} />
+					<SectionError message={detailsError ?? loadError} />
 				</Section>
 			) : null}
 
@@ -148,7 +156,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 						description="Documents print the primary one."
 					>
 						{profile === null ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
+							loadError ? null : <CardSkeleton lines={3} framed={false} />
 						) : (
 							<OwnerContactList<OwnerEmail>
 								items={profile.emails}
@@ -177,7 +185,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 								}
 							/>
 						)}
-						<SectionError message={emailsError} />
+						<SectionError message={emailsError ?? loadError} />
 					</Section>
 
 					<Section
@@ -186,7 +194,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 						description="Documents print the primary one."
 					>
 						{profile === null ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
+							loadError ? null : <CardSkeleton lines={3} framed={false} />
 						) : (
 							<OwnerContactList<OwnerPhone>
 								items={profile.phones}
@@ -213,7 +221,7 @@ export function OwnerSection({ part, onSaved }: OwnerSectionProps) {
 								}
 							/>
 						)}
-						<SectionError message={phonesError} />
+						<SectionError message={phonesError ?? loadError} />
 					</Section>
 				</>
 			) : null}

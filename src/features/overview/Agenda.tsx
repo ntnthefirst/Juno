@@ -104,7 +104,11 @@ function metaOf(item: CalendarItem): string {
 	return item.clientName ?? "";
 }
 
-const ROW = "flex min-h-14 w-full items-center gap-4 border-b border-line py-3 text-left";
+// The agenda row draws no hover tile (Agenda Row in the design), so the title
+// takes the accent under the pointer and on keyboard focus instead.
+const ROW = "group flex min-h-14 w-full items-center gap-4 border-b border-line py-3 text-left";
+const TITLE =
+	"block truncate text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] group-hover:text-accent group-focus-visible:text-accent";
 
 /**
  * Coming up: overdue, today and the days after it in one list, with the day at
@@ -134,8 +138,12 @@ export function Agenda({
 	);
 	const calendar = useLoaded(load);
 
-	const openCalendar = () => requestOpen({ kind: "screen", screen: "calendar" });
 	const openAgent = () => requestOpen({ kind: "screen", screen: "agent" });
+	// An appointment opens on its day in the calendar; a deadline is the project's own date, so it opens the project.
+	const openScheduled = (item: Extract<CalendarItem, { kind: "event" | "deadline" }>, date: string) =>
+		item.kind === "event"
+			? requestOpen({ kind: "event", id: item.eventId, date })
+			: requestOpen({ kind: "project", id: item.projectId, name: item.projectName });
 
 	const entries: Entry[] = [];
 	if (today) {
@@ -155,7 +163,7 @@ export function Agenda({
 							</span>
 						</span>
 						<span className="min-w-0 flex-1">
-							<span className="block truncate text-base">{titles.get(action.id) ?? action.summary}</span>
+							<span className={TITLE}>{titles.get(action.id) ?? action.summary}</span>
 							<span className="block truncate text-sm text-ink-muted">
 								{style.label} · asked {now === null ? "" : timeAgo(action.createdAt, now)}
 							</span>
@@ -210,12 +218,12 @@ export function Agenda({
 				time,
 				date,
 				node: (
-					<button type="button" onClick={openCalendar} className={ROW}>
+					<button type="button" onClick={() => openScheduled(item, date)} className={ROW}>
 						<span className="flex h-8 w-6 flex-none items-center justify-center">
 							<span aria-hidden className="h-8 w-[3px] rounded-[var(--radius-sm)] bg-accent" />
 						</span>
 						<span className="min-w-0 flex-1">
-							<span className="block truncate text-base">{title}</span>
+							<span className={TITLE}>{title}</span>
 							<span className="block truncate text-sm text-ink-muted">{metaOf(item) || " "}</span>
 						</span>
 						<span className="flex-none text-base tabular-nums text-ink">{time}</span>

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
+import type { DocumentRecord, Project, ProjectSummary, ProjectsView, ReferenceItem, TimeEntry } from "@shared/types";
 import { usePublishBreadcrumb } from "../../app/breadcrumb-context";
-import { TitleSearch } from "../../app/TitleSearch";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
+import { ListSearchBar } from "../../components/ListSearchBar";
+import { Select } from "../../components/Select";
 import { SelectionBar } from "../../components/SelectionBar";
 import { Toast } from "../../components/Toast";
 import { useRowSelection } from "../../lib/use-row-selection";
@@ -15,13 +16,15 @@ import { messageOf } from "../../lib/errors";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { ScheduleFormPage } from "../calendar/ScheduleFormPage";
 import { scheduleFormLabel, type ScheduleForm } from "../calendar/schedule-form";
-import { GenerateDialog } from "../documents/GenerateDialog";
+import { DocumentTakeover } from "../documents/DocumentTakeover";
+import { takeoverLabel, type DocumentTakeoverRequest } from "../documents/takeover";
 import { ProjectDetail, type ProjectTab } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 import { ProjectGrid } from "./ProjectGrid";
 import { ProjectTable } from "./ProjectTable";
 import { TimeEntryFormPage } from "./TimeEntryFormPage";
 import { ViewControls } from "./ViewControls";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Rows = { projects: ProjectSummary[]; statuses: ReferenceItem[] };
 
@@ -75,16 +78,25 @@ export function ProjectsScreen() {
 	// Seeded from the clicked row so the trail never flashes empty, then kept
 	// current by ProjectDetail once the real record has loaded.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPending("project")?.name ?? null);
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	useRecentTouch("project", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const [editing, setEditing] = useState<Project | null>(null);
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
 	// A time entry is a form too: null is closed, an entry of null is a new one.
 	const [timeForm, setTimeForm] = useState<{ entry: TimeEntry | null } | null>(null);
-	const [tab, setTab] = useState<ProjectTab>("notes");
-	// A document from a template is a page of its own, the same as on a client.
-	const [generating, setGenerating] = useState(false);
+	// A request from elsewhere may name the Documents tab and a document to preview there.
+	const [tab, setTab] = useState<ProjectTab>(() => (peekPending("project")?.tab === "documents" ? "documents" : "notes"));
+	const [openDocumentId, setOpenDocumentId] = useState<string | null>(() => peekPending("project")?.documentId ?? null);
+	// Signing, sending or writing a page takes the screen, the same as on a client.
+	const [documentPage, setDocumentPage] = useState<DocumentTakeoverRequest | null>(null);
+	// A page deleted from its own view, offered back from here.
+	const [deletedDocument, setDeletedDocument] = useState<DocumentRecord | null>(null);
 	const [deleted, setDeleted] = useState<ProjectSummary | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
@@ -181,15 +193,17 @@ export function ProjectsScreen() {
 	// nothing floats above it: a dialog on top handles Escape itself, and
 	// without this guard both would fire.
 	useEffect(() => {
-		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || generating) return;
+		if (selectedId === null || editing !== null || scheduleForm !== null || timeForm !== null || documentPage) return;
 		function onKey(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
-			if (document.querySelector("[role='dialog']")) return;
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			// A side panel or a file preview inside the record closes first. Their
+			// own listeners are added after this one, so they cannot stop it.
+			if (document.querySelector("[role='dialog'], [data-side-panel], [data-full-preview]")) return;
 			clearSelection();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, editing, scheduleForm, timeForm, generating, clearSelection]);
+	}, [selectedId, editing, scheduleForm, timeForm, documentPage, clearSelection]);
 
 	const rows = load.status === "ready" ? load.rows : null;
 	const needle = term.trim().toLowerCase();
@@ -250,11 +264,11 @@ export function ProjectsScreen() {
 					{ label: "Projects", onSelect: () => setEditing(null) },
 					{ label: "Edit project" },
 				]
-			: selectedId !== null && generating
+			: selectedId !== null && documentPage !== null
 				? [
 						{ label: "Projects", onSelect: clearSelection },
-						{ label: selectedName ?? "Project", onSelect: () => setGenerating(false) },
-						{ label: "New document" },
+						{ label: selectedName ?? "Project", onSelect: () => setDocumentPage(null) },
+						{ label: takeoverLabel(documentPage) },
 					]
 				: selectedId !== null && timeForm !== null
 				? [
@@ -283,15 +297,19 @@ export function ProjectsScreen() {
 		);
 	}
 
-	if (selectedId !== null && generating) {
+	if (selectedId !== null && documentPage) {
 		return (
-			<GenerateDialog
-				lockedProjectId={selectedId}
-				backLabel="Project"
-				onClose={() => setGenerating(false)}
-				onGenerated={() => {
-					setGenerating(false);
+			<DocumentTakeover
+				request={documentPage}
+				onTitleChange={(title) =>
+					setDocumentPage((current) => (current && current.record.title !== title ? { ...current, record: { ...current.record, title } } : current))
+				}
+				onClose={(sentence, gone) => {
+					setDocumentPage(null);
+					setTab("documents");
 					setDetailVersion((version) => version + 1);
+					if (gone) setDeletedDocument(gone);
+					else if (sentence) setNotice(sentence);
 				}}
 			/>
 		);
@@ -330,53 +348,74 @@ export function ProjectsScreen() {
 
 	if (selectedId !== null) {
 		return (
-			<ProjectDetail
-				key={`${selectedId}:${detailVersion}`}
-				projectId={selectedId}
-				tab={tab}
-				onTabChange={setTab}
-				onBack={clearSelection}
-				onChanged={refreshList}
-				onEdit={(project) => setEditing(project)}
-				onSchedule={setScheduleForm}
-				onGenerateDocument={() => setGenerating(true)}
-				onTimeForm={(entry) => setTimeForm({ entry })}
-				onNameChange={setSelectedName}
-				onDeleted={(project) => {
-					clearSelection();
-					setDeleted(project);
-					refreshList();
-				}}
-			/>
+			<>
+				<ProjectDetail
+					key={selectedId}
+					version={detailVersion}
+					projectId={selectedId}
+					tab={tab}
+					onTabChange={setTab}
+					onBack={clearSelection}
+					onChanged={refreshList}
+					onEdit={(project) => setEditing(project)}
+					onSchedule={setScheduleForm}
+					openDocumentId={openDocumentId}
+					onOpenedDocument={() => setOpenDocumentId(null)}
+					onDocumentTakeover={setDocumentPage}
+					onTimeForm={(entry) => setTimeForm({ entry })}
+					onNameChange={setSelectedName}
+					onDeleted={(project) => {
+						clearSelection();
+						setDeleted(project);
+						refreshList();
+					}}
+				/>
+				{deletedDocument ? (
+					<Toast
+						message={`${deletedDocument.title} deleted.`}
+						actionLabel="Undo"
+						onAction={() => {
+							const back = deletedDocument;
+							setDeletedDocument(null);
+							void window.juno.documents
+								.restore(back.id)
+								.then(() => setDetailVersion((version) => version + 1))
+								.catch((cause: unknown) => setNotice(messageOf(cause)));
+						}}
+						onDismiss={() => setDeletedDocument(null)}
+					/>
+				) : notice ? (
+					<Toast message={notice} onDismiss={() => setNotice(null)} />
+				) : null}
+			</>
 		);
 	}
 
 	return (
 		<div className="flex h-full flex-col px-6 py-8 lg:px-8 xl:px-10">
-			<TitleSearch value={term} onChange={setTerm} placeholder="Search projects" />
-			<div className="mb-6 flex w-full flex-col gap-4">
-				{view ? <ViewControls view={view} onChange={changeView} /> : null}
-
-				{rows && rows.projects.length > 0 ? (
-					<div className="flex items-center gap-2">
-						<select
+			<ListSearchBar
+				search={term}
+				onSearch={setTerm}
+				placeholder="Search projects"
+				filtersAriaLabel="Project filters"
+				filterCount={statusFilter ? 1 : 0}
+				onClearFilters={() => setStatusFilter("")}
+				filters={
+					rows && rows.projects.length > 0 ? (
+						<Select
+							label="Status"
 							value={statusFilter}
-							onChange={(event) => setStatusFilter(event.target.value)}
-							aria-label="Filter by status"
-							className="h-[36px] rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 text-dense text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-						>
-							<option value="">Every status</option>
-							{rows.statuses
+							onChange={setStatusFilter}
+							placeholder="Any status"
+							options={rows.statuses
 								.filter((item) => item.hiddenAt === null)
-								.map((item) => (
-									<option key={item.id} value={item.id}>
-										{item.label}
-									</option>
-								))}
-						</select>
-					</div>
-				) : null}
-			</div>
+								.map((item) => ({ value: item.id, label: item.label }))}
+						/>
+					) : undefined
+				}
+			/>
+			{/* Drawn in the title bar, so it takes no room on the page. */}
+			{view ? <ViewControls view={view} onChange={changeView} /> : null}
 
 			{selection.selectedIds.length > 0 && shown.length > 0 ? (
 				<div className="mb-6">
@@ -406,7 +445,7 @@ export function ProjectsScreen() {
 
 			<div className="min-h-0 w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("projects")}>
 				{load.status === "loading" || !view ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={8} label="Loading your projects" />
 				) : load.status === "error" ? (
 					<div className="border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">

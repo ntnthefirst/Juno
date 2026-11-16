@@ -39,7 +39,7 @@ const FREQUENCIES: { value: string; label: string }[] = [
 ];
 
 const CONTROL =
-	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-base text-[var(--ink)] focus:border-[var(--accent)] focus:bg-[var(--surface)] disabled:opacity-60";
+	"h-10 w-full rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-base text-[var(--ink)] focus:border-[var(--focus)] focus:shadow-[inset_0_0_0_1px_var(--focus)] disabled:opacity-50";
 
 export function RecurrenceEditor({ value, onChange, startLocal, disabled = false, error }: RecurrenceEditorProps) {
 	const id = useId();
@@ -72,7 +72,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 
 			{state ? (
 				<div>
-					<label htmlFor={`${id}-interval`} className="mb-1 block text-sm text-[var(--ink-muted)]">
+					<label htmlFor={`${id}-interval`} className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]">
 						Every
 					</label>
 					<div className="flex items-center gap-2">
@@ -95,7 +95,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 
 			{state?.freq === "WEEKLY" ? (
 				<div className="col-span-2">
-					<span className="mb-1 block text-sm text-[var(--ink-muted)]">On</span>
+					<span className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]">On</span>
 					<div className="flex gap-1" role="group" aria-label="Weekdays">
 						{WEEKDAYS.map((day) => {
 							const active = state.weekdays.includes(day.value);
@@ -156,7 +156,7 @@ export function RecurrenceEditor({ value, onChange, startLocal, disabled = false
 					/>
 					{state.ends === "count" ? (
 						<div>
-							<label htmlFor={`${id}-count`} className="mb-1 block text-sm text-[var(--ink-muted)]">
+							<label htmlFor={`${id}-count`} className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]">
 								Times
 							</label>
 							<input

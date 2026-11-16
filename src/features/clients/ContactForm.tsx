@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { FormPage } from "../../components/FormPage";
 import { Field } from "../../components/Field";
 import { MarkdownEditor } from "../../components/MarkdownEditor";
+import { messageOf } from "../../lib/errors";
 
 type ContactFormProps = {
 	clientId: string;
@@ -36,9 +37,6 @@ function textOrNull(value: string): string | null {
 	return trimmed.length > 0 ? trimmed : null;
 }
 
-function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
 
 export function ContactForm({ clientId, contact, onClose, onSaved }: ContactFormProps) {
 	// The submit button lives in the page footer, outside the form element.
@@ -131,7 +129,7 @@ export function ContactForm({ clientId, contact, onClose, onSaved }: ContactForm
 					<div className="col-span-2">
 						<label
 							htmlFor={notesId}
-							className="mb-1 block text-sm text-[var(--ink-muted)]"
+							className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]"
 						>
 							Notes
 						</label>

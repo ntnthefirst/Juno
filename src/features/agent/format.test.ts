@@ -43,7 +43,7 @@ describe("parseMailPreview", () => {
 describe("toolVisual", () => {
 	it("tells what a tool works on and what it does to it", () => {
 		expect(toolVisual("mail.send")).toEqual({ domain: "sent", verb: "send" });
-		expect(toolVisual("mail.outbox.cancel")).toEqual({ domain: "sent", verb: "delete" });
+		expect(toolVisual("mail.outbox.delete")).toEqual({ domain: "sent", verb: "delete" });
 		expect(toolVisual("mail.file.trash_messages")).toEqual({ domain: "inbox", verb: "file" });
 		expect(toolVisual("clients.phones.create")).toEqual({ domain: "phone", verb: "create" });
 		expect(toolVisual("reminders.complete")).toEqual({ domain: "reminders", verb: "done" });

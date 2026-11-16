@@ -898,7 +898,7 @@ export async function runForAccount(
 	const reads = ofKind("mark_read");
 	for (const entry of reads.filter(alreadyDone)) tally[record(db, entry, "skipped", "Already read.")] += 1;
 	await carryOut(db, reads.filter((entry) => !alreadyDone(entry)), isPaused, async (ids) => {
-		await filing.setSeen(ids, true, db);
+		await filing.setSeenOnServer(ids, true, db);
 	}, tally);
 
 	const flags = ofKind("flag");

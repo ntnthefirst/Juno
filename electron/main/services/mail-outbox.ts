@@ -74,7 +74,7 @@ function notifyQueued(): void {
 
 /**
  * Fired whenever a row changes outside the sender's own lifecycle: a draft
- * saved or edited, a message cancelled, retried, approved or removed. The
+ * saved or edited, a message returned to a draft, retried, approved or removed. The
  * sender publishes `sending`, `sent`, `failed` and the Sent-folder append
  * itself in ./mail-send.ts; this covers everything else `mail.outboxChanged`
  * also needs to reach the window for, which used to be nothing, so a draft
@@ -104,7 +104,7 @@ export function onAgentDraft(listener: (message: MailOutboxMessage) => void): ()
 
 type Row = typeof mailOutbox.$inferSelect;
 
-const STATES: MailOutboxState[] = ["draft", "pending", "queued", "sending", "sent", "failed", "cancelled"];
+const STATES: MailOutboxState[] = ["draft", "pending", "queued", "sending", "sent", "failed"];
 
 function parseAddresses(json: string): MailAddress[] {
 	try {
@@ -456,8 +456,7 @@ export async function counts(accountId?: string, db: Db = getDb()): Promise<Mail
  * answered. Once a live message in the thread carries the row's Message-ID the
  * synced copy is the record and the row steps aside, so nothing shows twice.
  * Drafts, rows waiting for approval and failed sends are listed, marked by
- * their state, so the overview shows the whole conversation. A cancelled row is
- * not in it any more, and a deleted row never is.
+ * their state, so the overview shows the whole conversation. A deleted row is never in it.
  */
 export function outgoingForThread(threadId: string, db: Db = getDb()): MailThreadOutgoing[] {
 	const synced = db
@@ -1060,16 +1059,38 @@ export async function requestSend(id: string, db: Db = getDb()): Promise<MailOut
 	return record;
 }
 
-/** Withdraws a message that has not gone out. A sent message cannot be unsent. */
-export async function cancel(id: string, db: Db = getDb()): Promise<MailOutboxMessage> {
+/**
+ * Takes a message that has not gone out back to a draft, so it can be edited.
+ * A message waiting for approval, in the queue or failed goes back; a draft
+ * stays as it is. One the sender holds or has sent cannot be taken back. The
+ * update is conditional on the state, so a message the sender picks up between
+ * the read and the write is left alone. `updatedAt` moves, which is the seal
+ * of an agent's request to send it: an approval of what it said before is
+ * refused.
+ */
+export async function returnToDraft(id: string, db: Db = getDb()): Promise<MailOutboxMessage> {
 	const row = requireRow(id, db);
-	if (row.state === "sent" || row.state === "sending") {
-		throw new Error(`A ${row.state} message cannot be cancelled.`);
+	if (row.state === "draft") return requireRecord(id, db);
+	if (row.state === "sending") {
+		throw new Error("This message is being sent right now. Wait for it to finish, then check Sent.");
 	}
-	db.update(mailOutbox)
-		.set({ state: "cancelled", updatedAt: now() })
-		.where(eq(mailOutbox.id, id))
-		.run();
+	if (row.state === "sent") throw new Error("This message has already been sent and cannot be edited.");
+	const [updated] = db
+		.update(mailOutbox)
+		.set({
+			state: "draft",
+			requestedBy: "user",
+			approvedAt: null,
+			queuedAt: null,
+			lastError: null,
+			updatedAt: now(),
+		})
+		.where(and(eq(mailOutbox.id, id), inArray(mailOutbox.state, ["pending", "queued", "failed"])))
+		.returning({ id: mailOutbox.id })
+		.all();
+	if (!updated) {
+		throw new Error("This message was picked up for sending just now. Wait for it to finish, then check Sent.");
+	}
 	const record = await requireRecord(id, db);
 	notifyChanged(record);
 	return record;
@@ -1090,17 +1111,27 @@ export async function retry(id: string, db: Db = getDb()): Promise<MailOutboxMes
 	return record;
 }
 
-/** Soft-deletes a draft or a cancelled message. Anything else stays as history. */
+/**
+ * Soft-deletes a message that has not gone out. One being sent or already sent
+ * stays as history. The update is conditional on the state, so a message the
+ * sender picks up meanwhile is not removed from under it.
+ */
 export async function remove(id: string, db: Db = getDb()): Promise<MailOutboxMessage> {
 	const row = requireRow(id, db);
-	if (row.state !== "draft" && row.state !== "cancelled" && row.state !== "failed") {
-		throw new Error(`A ${row.state} message stays in the outbox as a record.`);
+	if (row.state === "sending") {
+		throw new Error("This message is being sent right now. Wait for it to finish, then check Sent.");
 	}
+	if (row.state === "sent") throw new Error("A sent message stays in the outbox as a record.");
 	const stamp = now();
-	db.update(mailOutbox)
+	const [updated] = db
+		.update(mailOutbox)
 		.set({ deletedAt: stamp, updatedAt: stamp })
-		.where(eq(mailOutbox.id, id))
-		.run();
+		.where(and(eq(mailOutbox.id, id), inArray(mailOutbox.state, ["draft", "pending", "queued", "failed"])))
+		.returning({ id: mailOutbox.id })
+		.all();
+	if (!updated) {
+		throw new Error("This message was picked up for sending just now. Wait for it to finish, then check Sent.");
+	}
 	const record = toRecord({ ...row, deletedAt: stamp }, null, [], []);
 	notifyChanged(record);
 	return record;

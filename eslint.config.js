@@ -6,7 +6,10 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
 	{
-		ignores: ["dist/**", "dist-electron/**", "release/**", "node_modules/**", ".smoke/**"],
+		// .claude/ holds the rules and any git worktrees made beside this
+		// checkout; linting a worktree's half-finished files here reports
+		// problems that are not in this tree.
+		ignores: ["dist/**", "dist-electron/**", "release/**", "node_modules/**", ".smoke/**", ".claude/**"],
 	},
 
 	// Renderer

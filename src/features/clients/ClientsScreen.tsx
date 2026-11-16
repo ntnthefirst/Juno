@@ -24,6 +24,7 @@ import { Dialog } from "../../components/Dialog";
 import { SelectionBar } from "../../components/SelectionBar";
 import { MenuButton } from "../../components/Menu";
 import { EmptyState } from "../../components/EmptyState";
+import { RecordLink } from "../../components/RecordLink";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { clearPendingClient, peekPendingClient } from "../../lib/open-client";
@@ -49,9 +50,8 @@ import {
 } from "./client-view";
 import { ColumnHeader } from "./ColumnHeader";
 import { CheckList, RangeField } from "./ColumnFilters";
-import { DocumentDetail } from "../documents/DocumentDetail";
-import { GenerateDialog } from "../documents/GenerateDialog";
-import { SignPage } from "../documents/SignPage";
+import { DocumentTakeover } from "../documents/DocumentTakeover";
+import { takeoverLabel, type DocumentTakeoverRequest } from "../documents/takeover";
 import { ClientEmailPanel } from "./ClientEmailPanel";
 import { ClientForm } from "./ClientForm";
 import { ClientNotePanel } from "./ClientNotePanel";
@@ -63,6 +63,7 @@ import { useRecentTouch } from "../../lib/use-recent-touch";
 import { listAllClients } from "../../lib/list-all-clients";
 import { useGradualCount } from "../../lib/use-gradual-count";
 import { useRowSelection } from "../../lib/use-row-selection";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Load =
 	| { status: "loading" }
@@ -80,7 +81,12 @@ export function ClientsScreen() {
 	// renames the client corrects it through `saved`, which is the only other
 	// place the full row comes back from the main process.
 	const [selectedName, setSelectedName] = useState<string | null>(() => peekPendingClient()?.name ?? null);
-	useEffect(() => clearPendingClient, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPendingClient();
+		return clearPendingClient;
+	}, []);
 	useRecentTouch("client", selectedId);
 	const [detailVersion, setDetailVersion] = useState(0);
 	const bumpDetail = () => setDetailVersion((current) => current + 1);
@@ -91,15 +97,14 @@ export function ClientsScreen() {
 	const [contactForm, setContactForm] = useState<{ contact: Contact | null } | null>(null);
 	const [projectForm, setProjectForm] = useState<{ project: Project } | null>(null);
 	const [scheduleForm, setScheduleForm] = useState<ScheduleForm | null>(null);
-	// A document from a template is a page too. Coming back from it lands on the
-	// Documents tab, where it was started from.
-	const [documentForm, setDocumentForm] = useState(false);
-	// A document opens in the same viewer the Documents screen uses, inside this
-	// client, so the trail and Escape lead back to the Documents tab.
-	const [openDocument, setOpenDocument] = useState<{ id: string; title: string } | null>(null);
-	const [signingRecord, setSigningRecord] = useState<DocumentRecord | null>(null);
-	const [documentVersion, setDocumentVersion] = useState(0);
-	const [detailTab, setDetailTab] = useState<TabId>("overview");
+	// Signing, sending or writing a page takes the screen. Coming back from it
+	// lands on the Documents tab, where it was started from.
+	const [documentPage, setDocumentPage] = useState<DocumentTakeoverRequest | null>(null);
+	// A page deleted from its own view, offered back from here.
+	const [deletedDocument, setDeletedDocument] = useState<DocumentRecord | null>(null);
+	// A request from elsewhere may name the Documents tab and a document to preview there.
+	const [detailTab, setDetailTab] = useState<TabId>(() => (peekPendingClient()?.tab === "documents" ? "documents" : "overview"));
+	const [openDocumentId, setOpenDocumentId] = useState<string | null>(() => peekPendingClient()?.documentId ?? null);
 	// Unlike contacts and projects, these are small enough to edit in a side
 	// panel next to the detail pane rather than taking over the screen.
 	const [emailPanel, setEmailPanel] = useState<{ email: ClientEmail | null } | null>(null);
@@ -170,21 +175,13 @@ export function ClientsScreen() {
 
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 
-	function selectRow(row: ClientSummary) {
-		setDetailTab("overview");
+	function selectRow(row: ClientSummary, tab: TabId = "overview") {
+		setDetailTab(tab);
 		setSelectedId(row.id);
 		setSelectedName(row.name);
 	}
 
-	function closeDocument() {
-		setOpenDocument(null);
-		setSigningRecord(null);
-		setDetailTab("documents");
-	}
-
 	function backToList() {
-		setOpenDocument(null);
-		setSigningRecord(null);
 		setDetailTab("overview");
 		setSelectedId(null);
 		setSelectedName(null);
@@ -349,17 +346,11 @@ export function ClientsScreen() {
 			{ label: selectedName ?? "Client", onSelect: () => setScheduleForm(null) },
 			{ label: scheduleFormLabel(scheduleForm) },
 		];
-	} else if (openDocument && selectedId) {
+	} else if (documentPage && selectedId) {
 		trail = [
 			clientCrumb,
-			{ label: selectedName ?? "Client", onSelect: closeDocument },
-			{ label: openDocument.title },
-		];
-	} else if (documentForm && selectedId) {
-		trail = [
-			clientCrumb,
-			{ label: selectedName ?? "Client", onSelect: () => setDocumentForm(false) },
-			{ label: "New document" },
+			{ label: selectedName ?? "Client", onSelect: () => setDocumentPage(null) },
+			{ label: takeoverLabel(documentPage) },
 		];
 	} else if (selectedId !== null) {
 		trail = [clientCrumb, { label: selectedName ?? "Client" }];
@@ -373,20 +364,17 @@ export function ClientsScreen() {
 	// this screen does not hold.
 	useEffect(() => {
 		function onKey(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (selectedId === null) return;
-			if (form || contactForm || projectForm || scheduleForm || documentForm || signingRecord) return;
-			if (openDocument) {
-				if (!document.querySelector("[role='dialog']")) closeDocument();
-				return;
-			}
+			if (form || contactForm || projectForm || scheduleForm || documentPage) return;
 			if (emailPanel || phonePanel || linkPanel || addressPanel || notePanel) return;
-			if (document.querySelector("[role='dialog']")) return;
+			// A file preview or the add files flow on the Documents tab closes first.
+			if (document.querySelector("[role='dialog'], [data-full-preview], [data-add-files]")) return;
 			backToList();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentForm, openDocument, signingRecord, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
+	}, [selectedId, form, contactForm, projectForm, scheduleForm, documentPage, emailPanel, phonePanel, linkPanel, addressPanel, notePanel]);
 
 	if (compose) {
 		return (
@@ -454,48 +442,19 @@ export function ClientsScreen() {
 		);
 	}
 
-	if (signingRecord && selectedId) {
+	if (documentPage && selectedId) {
 		return (
-			<SignPage
-				record={signingRecord}
-				onClose={() => setSigningRecord(null)}
-				onSigned={() => {
-					setSigningRecord(null);
-					setDocumentVersion((version) => version + 1);
-					bumpDetail();
-				}}
-			/>
-		);
-	}
-
-	if (openDocument && selectedId) {
-		return (
-			<div className="h-full min-h-0 w-full">
-				<DocumentDetail
-					key={`${openDocument.id}:${documentVersion}`}
-					documentId={openDocument.id}
-					onDeleted={() => {
-						closeDocument();
-						bumpDetail();
-					}}
-					onChanged={bumpDetail}
-					onSign={setSigningRecord}
-					onTitleChange={(title) => setOpenDocument((current) => (current ? { ...current, title } : current))}
-				/>
-			</div>
-		);
-	}
-
-	if (documentForm && selectedId) {
-		return (
-			<GenerateDialog
-				lockedClientId={selectedId}
-				backLabel="Client"
-				onClose={() => setDocumentForm(false)}
-				onGenerated={() => {
-					setDocumentForm(false);
+			<DocumentTakeover
+				request={documentPage}
+				onTitleChange={(title) =>
+					setDocumentPage((current) => (current && current.record.title !== title ? { ...current, record: { ...current.record, title } } : current))
+				}
+				onClose={(sentence, gone) => {
+					setDocumentPage(null);
 					setDetailTab("documents");
 					bumpDetail();
+					if (gone) setDeletedDocument(gone);
+					else if (sentence) setNotice(sentence);
 				}}
 			/>
 		);
@@ -510,11 +469,13 @@ export function ClientsScreen() {
 				<div className="min-h-0 flex-1 overflow-y-auto p-8">
 					<div className="w-full">
 						<ClientDetail
-							key={`${selectedId}:${detailVersion}`}
+							key={selectedId}
+							version={detailVersion}
 							clientId={selectedId}
 							onEdit={(client) => setForm({ client })}
 							onDelete={(client) => void remove(client)}
 							onSendMail={(client) => void startMail(client.id)}
+							onMailTo={(address) => setCompose({ clientId: selectedId, to: [{ name: null, address }] })}
 							onChanged={(message) => {
 								if (message) setNotice(message);
 								refreshList();
@@ -527,8 +488,9 @@ export function ClientsScreen() {
 							onEditPhone={(phone) => setPhonePanel({ phone })}
 							onEditLink={(link) => setLinkPanel({ link })}
 							onEditAddress={(address) => setAddressPanel({ address })}
-							onGenerateDocument={() => setDocumentForm(true)}
-							onOpenDocument={(id, title) => setOpenDocument({ id, title })}
+							openDocumentId={openDocumentId}
+							onOpenedDocument={() => setOpenDocumentId(null)}
+							onDocumentTakeover={setDocumentPage}
 							initialTab={detailTab}
 							onTabChange={setDetailTab}
 							onEditNote={(note, initialKind) => setNotePanel({ clientId: selectedId, note, initialKind })}
@@ -596,6 +558,24 @@ export function ClientsScreen() {
 						}}
 					/>
 				) : null}
+
+				{deletedDocument ? (
+					<Toast
+						message={`${deletedDocument.title} deleted.`}
+						actionLabel="Undo"
+						onAction={() => {
+							const back = deletedDocument;
+							setDeletedDocument(null);
+							void window.juno.documents
+								.restore(back.id)
+								.then(() => bumpDetail())
+								.catch((cause: unknown) => setNotice(messageOf(cause)));
+						}}
+						onDismiss={() => setDeletedDocument(null)}
+					/>
+				) : notice ? (
+					<Toast message={notice} onDismiss={dismissNotice} />
+				) : null}
 			</div>
 		);
 	}
@@ -655,7 +635,7 @@ export function ClientsScreen() {
 
 			<div className="w-full flex-1 overflow-y-auto" onContextMenu={blankMenuFor("clients")}>
 				{load.status === "loading" ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={10} avatar label="Loading your clients" />
 				) : load.status === "error" ? (
 					<ErrorNote message={load.message} />
 				) : load.rows.length === 0 ? (
@@ -754,7 +734,8 @@ type ClientTableProps = {
 	view: ClientView;
 	onView: (view: ClientView) => void;
 	selectedId: string | null;
-	onSelect: (row: ClientSummary) => void;
+	/** Opens the client, on its overview unless a tab is named. */
+	onSelect: (row: ClientSummary, tab?: TabId) => void;
 	onEdit: (row: ClientSummary) => void;
 	onAddNote: (row: ClientSummary) => void;
 	onDelete: (row: ClientSummary) => void;
@@ -949,7 +930,18 @@ function ClientTable({
 									{row.city ?? ""}
 								</td>
 								<td className="tabular border-b border-[var(--line)]/60 px-3 text-right text-dense text-[var(--ink-muted)]">
-									{row.openProjectCount} / {row.projectCount}
+									{hasSelection || row.projectCount === 0 ? (
+										`${row.openProjectCount} / ${row.projectCount}`
+									) : (
+										// The count is a way to the client's projects, as the tab that lists them.
+										<RecordLink
+											tone="quiet"
+											label={`Projects for ${row.name}`}
+											onOpen={() => onSelect(row, "projects")}
+										>
+											{row.openProjectCount} / {row.projectCount}
+										</RecordLink>
+									)}
 								</td>
 							</tr>
 						);

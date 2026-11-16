@@ -30,14 +30,16 @@ export function cancelNewRecord(madeAlongside = false): void {
  * inside it rather than the window growing.
  */
 export function RecordWindow({ title, saveLabel, busy, error, onSubmit, madeAlongside = false, children }: RecordWindowProps) {
-	// Escape closes a modal window, and this one is one.
+	// Escape closes a modal window, and this one is one. Not while a save is on
+	// its way: the record is being written, and closing as a cancel would tell
+	// the screen behind that nothing was made, so it would not read again.
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && !event.defaultPrevented) cancelNewRecord(madeAlongside);
+			if (event.key === "Escape" && !event.defaultPrevented && !busy) cancelNewRecord(madeAlongside);
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [madeAlongside]);
+	}, [madeAlongside, busy]);
 
 	function submit(event: FormEvent) {
 		event.preventDefault();
@@ -71,7 +73,9 @@ export function RecordWindow({ title, saveLabel, busy, error, onSubmit, madeAlon
 			</div>
 
 			<footer className="flex flex-none items-center justify-end gap-2 border-t border-[var(--line)] px-8 py-4">
-				<Button onClick={() => cancelNewRecord(madeAlongside)}>Cancel</Button>
+				<Button disabled={busy} onClick={() => cancelNewRecord(madeAlongside)}>
+					Cancel
+				</Button>
 				<Button type="submit" variant="primary" disabled={busy}>
 					{busy ? "Saving" : saveLabel}
 				</Button>

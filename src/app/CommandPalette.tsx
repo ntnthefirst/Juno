@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { MailThreadSummary } from "@shared/types";
 import { Icon, type IconName } from "../components/Icon";
 import { Kbd } from "../components/Kbd";
+import { RowsSkeleton } from "../components/RowsSkeleton";
 import { requestOpenClient } from "../lib/open-client";
 import { requestOpen } from "../lib/open-entity";
 import { rank } from "../lib/palette-search";
@@ -145,8 +146,7 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 			{ id: "go-mail", label: "Mail", icon: "mail", keys: comboKeys("mail"), keywords: "inbox email messages", run: go("mail") },
 			{ id: "go-styled-mail", label: "Styled mail", icon: "templates", keywords: "mail templates email layouts", run: go("mail-templates") },
 			{ id: "go-notes", label: "Notes", icon: "note", keys: comboKeys("notes"), keywords: "jottings checklist write", run: go("notes") },
-			{ id: "go-documents", label: "Documents", icon: "documents", keys: comboKeys("documents"), keywords: "contracts pdf files", run: go("documents") },
-			{ id: "go-templates", label: "Templates", icon: "templates", keywords: "document templates contracts letters", run: go("document-templates") },
+			{ id: "go-files", label: "Files", icon: "documents", keys: comboKeys("files"), keywords: "own files documents terms logo spreadsheet no client", run: go("files") },
 			{ id: "go-reminders", label: "Reminders", icon: "reminders", keys: formatCombo(COMBOS.reminders), keywords: "tasks due todo", run: go("reminders") },
 			{ id: "go-agent", label: "Agent", icon: "agent", keys: comboKeys("agent"), keywords: "assistant mcp connection requests", run: go("agent") },
 			{ id: "go-settings", label: "Settings", icon: "settings", keys: formatCombo(COMBOS.settings), keywords: "preferences account mail accounts theme", run: onSettings },
@@ -154,13 +154,11 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 
 		const create: PaletteItem[] = [
 			{ id: "new-note", label: "New note", icon: "add", keywords: "write jot checklist", run: () => onNew("notes") },
-			{ id: "new-page", label: "New page", icon: "add", keywords: "write document quote", keys: formatCombo(COMBOS.newPage), run: () => onNew("documents", "new-page") },
 			{ id: "new-reminder", label: "New reminder", icon: "add", keywords: "task due", run: () => onNew("overview") },
 			{ id: "new-event", label: "New event", icon: "add", keywords: "appointment calendar", run: () => onNew("calendar") },
 			{ id: "new-client", label: "New client", icon: "add", keywords: "customer company", run: () => onNew("clients") },
 			{ id: "new-project", label: "New project", icon: "add", keywords: "work job", run: () => onNew("projects") },
 			{ id: "new-message", label: "New message", icon: "add", keywords: "compose write email mail", run: () => onNew("mail") },
-			{ id: "new-document", label: "New document", icon: "add", keywords: "generate contract letter", run: () => onNew("documents") },
 		];
 
 		const other: PaletteItem[] = [
@@ -267,6 +265,16 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 	}, [term, scope, clients, projects, documents, notes, mail, onNavigate, onNew, onSettings, onLock, onHelp]);
 
 	const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
+
+	// Nothing matches is only true once every place the search looks has answered.
+	const looksIn = (kind: Scope) => scope === "all" || scope === kind;
+	const waiting =
+		term !== "" &&
+		((looksIn("client") && clients.status === "loading") ||
+			(looksIn("project") && projects.status === "loading") ||
+			(looksIn("document") && documents.status === "loading") ||
+			(looksIn("note") && notes.status === "loading") ||
+			(looksIn("mail") && term.length >= MIN_MAIL_QUERY && mail?.query !== term));
 	const index = Math.min(active, Math.max(0, flat.length - 1));
 
 	useEffect(() => {
@@ -385,7 +393,9 @@ export function CommandPalette({ onClose, onNavigate, onNew, onSettings, onLock,
 				) : null}
 
 				<div ref={list} id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto p-2">
-					{flat.length === 0 ? (
+					{flat.length === 0 && waiting ? (
+						<RowsSkeleton rows={4} divided={false} trailing={false} label="Searching" />
+					) : flat.length === 0 ? (
 						<p className="px-3 py-8 text-center text-dense text-[var(--ink-muted)]">
 							Nothing matches.
 						</p>

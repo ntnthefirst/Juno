@@ -7,8 +7,7 @@ export type ScreenId =
 	| "mail"
 	| "mail-templates"
 	| "notes"
-	| "documents"
-	| "document-templates"
+	| "files"
 	| "clients"
 	| "projects"
 	| "reminders"
@@ -21,9 +20,8 @@ export type ScreenItem = { id: ScreenId; label: string; icon: IconName };
  * happens, and Settings at the foot. The agent is about Juno itself and sits
  * in the title bar, beside the window's own buttons.
  *
- * Mail and Documents each hold a second screen behind a switch at the top of
- * the page (`SCREEN_SWITCH`), and Reminders is reached from the overview, so
- * none of the three has an entry of its own here. Settings is a window, not a
+ * Mail holds Styled mail, opened from its title bar, and Reminders is
+ * reached from the overview, so neither has an entry of its own here. Settings is a window, not a
  * screen, and is added by the sidebar rather than listed.
  */
 export const SIDEBAR_TOP: ScreenItem[] = [
@@ -33,7 +31,7 @@ export const SIDEBAR_TOP: ScreenItem[] = [
 	{ id: "projects", label: "Projects", icon: "projects" },
 	{ id: "mail", label: "Mail", icon: "mail" },
 	{ id: "notes", label: "Notes", icon: "note" },
-	{ id: "documents", label: "Documents", icon: "documents" },
+	{ id: "files", label: "Files", icon: "documents" },
 ];
 
 export const SCREEN_LABELS: Record<ScreenId, string> = {
@@ -42,8 +40,7 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	mail: "Mail",
 	"mail-templates": "Styled mail",
 	notes: "Notes",
-	documents: "Documents",
-	"document-templates": "Templates",
+	files: "Files",
 	clients: "Clients",
 	projects: "Projects",
 	reminders: "Reminders",
@@ -57,23 +54,11 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
 	mail: "mail",
 	"mail-templates": "mail",
 	notes: "notes",
-	documents: "documents",
-	"document-templates": "documents",
+	files: "files",
 	clients: "clients",
 	projects: "projects",
 	reminders: "overview",
 	agent: "agent",
-};
-
-/**
- * Screens that share a page with another through a switch. Each pair names its
- * two sides, in the order the switch draws them.
- */
-export type ScreenSwitch = { left: { id: ScreenId; label: string }; right: { id: ScreenId; label: string } };
-
-export const DOCUMENT_SWITCH: ScreenSwitch = {
-	left: { id: "documents", label: "Documents" },
-	right: { id: "document-templates", label: "Templates" },
 };
 
 /**
@@ -90,8 +75,7 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 	mail: { screen: "mail", label: "New message" },
 	"mail-templates": { screen: "mail", label: "New message" },
 	notes: { screen: "notes", label: "New note" },
-	documents: { screen: "documents", label: "New document" },
-	"document-templates": { screen: "documents", label: "New document" },
+	files: { screen: "files", label: "New page" },
 };
 
 /**
@@ -111,24 +95,48 @@ export type NewMenuEntry = {
 
 export const NEW_MENU: NewMenuEntry[] = [
 	{ screen: "notes", label: "New note", icon: "note" },
-	{ screen: "documents", action: "new-page", label: "New page", icon: "documents" },
 	{ screen: "calendar", label: "New event", icon: "calendar" },
 	{ screen: "clients", label: "New client", icon: "clients" },
 	{ screen: "projects", label: "New project", icon: "projects" },
-	{ screen: "documents", action: "import", label: "Import a file", icon: "import", separatorBefore: true },
 ];
+
+/**
+ * A screen that starts more than one kind of thing has a New menu of its own,
+ * with only what belongs there (frames in section 22 of the design). Overview
+ * keeps the whole of `NEW_MENU`, and a screen that makes one kind of record
+ * makes it at once (`NEW_AT_RIGHT`).
+ */
+const MAIL_NEW: NewMenuEntry[] = [
+	{ screen: "mail", label: "New message", icon: "mail" },
+	{ screen: "mail", action: "styled-mail", label: "Styled mail", icon: "templates" },
+	{ screen: "mail", action: "new-folder", label: "New folder", icon: "projects", separatorBefore: true },
+	{ screen: "mail", action: "new-rule", label: "New mailbox rule", icon: "filter" },
+	{ screen: "mail", action: "new-block", label: "New intro or outro", icon: "note" },
+];
+
+export const NEW_MENUS: Partial<Record<ScreenId, NewMenuEntry[]>> = {
+	mail: MAIL_NEW,
+	"mail-templates": MAIL_NEW,
+	calendar: [
+		{ screen: "calendar", label: "New event", icon: "calendar" },
+		{ screen: "calendar", action: "new-reminder", label: "New reminder", icon: "reminders" },
+		{ screen: "calendar", action: "subscribe", label: "Subscribe to a calendar", icon: "sync", separatorBefore: true },
+		{ screen: "calendar", action: "import-calendar", label: "Import a calendar file", icon: "import" },
+	],
+};
 
 /** The glyph of the entry a screen adds to the New menu when the design's list has none for it. */
 export const NEW_OWN_ICON: Record<string, IconName> = {
 	"New reminder": "reminders",
 	"New message": "mail",
-	"New document": "documents",
+	"New page": "documents",
 };
 
 /**
  * Screens where New, the text button at the right of the title bar, makes the
- * screen's own record at once. On every other screen it opens the New menu.
- * With a document open the plus at the left takes its place, as the page frame
- * draws it.
+ * screen's own record at once, because it is the one thing they start. A screen
+ * with its own list in `NEW_MENUS` opens that, and any other screen opens the
+ * whole New menu. With a document open the plus at the left takes its place, as
+ * the page frame draws it.
  */
-export const NEW_AT_RIGHT: ScreenId[] = ["notes", "calendar", "clients", "projects", "documents", "reminders"];
+export const NEW_AT_RIGHT: ScreenId[] = ["notes", "files", "clients", "projects", "reminders"];

@@ -150,6 +150,9 @@ export function WeekView({
 
 	function endDrag(event: PointerEvent<HTMLElement>) {
 		if (!drag) return;
+		// The resize handle sits inside the block, so its release would reach the
+		// block as well and save the same resize a second time.
+		event.stopPropagation();
 		event.currentTarget.releasePointerCapture(event.pointerId);
 		const finished = drag;
 		setDrag(null);
@@ -257,7 +260,7 @@ export function WeekView({
 						{HOURS.map((hour) => (
 							<div
 								key={hour}
-								className="tabular absolute right-2 font-mono text-micro text-[var(--ink-muted)]"
+								className="tabular absolute right-2 text-micro text-[var(--ink-muted)]"
 								style={{ top: hour * HOUR_PX }}
 							>
 								{hour === 0 ? "" : formatMinutes(hour * 60)}
@@ -266,7 +269,7 @@ export function WeekView({
 						{nowMinute !== null ? (
 							<div
 								aria-hidden
-								className="tabular absolute right-2 z-[2] -translate-y-1/2 bg-[var(--surface)] pl-1 font-mono text-micro text-[var(--risk)]"
+								className="tabular absolute right-2 z-[2] -translate-y-1/2 bg-[var(--surface)] pl-1 text-micro text-[var(--risk)]"
 								style={{ top: (nowMinute / 60) * HOUR_PX }}
 							>
 								{formatMinutes(nowMinute)}

@@ -11,6 +11,7 @@ import { AppearanceSection } from "../settings/AppearanceSection";
 import { LockDialog, type LockMode } from "../settings/LockSection";
 import { SoloSectionContext } from "../settings/section-layout";
 import welcomeHero from "../../assets/welcome-bureau.jpg";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 /**
  * Mirrors ONBOARDING_VERSION in electron/main/services/settings.ts. The
@@ -155,15 +156,22 @@ function StepRail({ step, onSelect }: StepRailProps) {
 								aria-label={entry.label}
 								aria-current={state === "current" ? "step" : undefined}
 								onClick={reachable ? () => onSelect(index) : undefined}
-								className="flex h-6 w-5 items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+								className="relative flex h-6 w-5 items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
 							>
 								<span
 									aria-hidden
 									className={[
-										"block h-1.5 rounded-[var(--radius-full)] transition-all duration-[var(--duration-base)] ease-[var(--ease)]",
-										state === "current" ? "w-[30px] bg-[var(--accent)]" : "w-1.5",
-										state === "done" ? "bg-[var(--accent)]" : "",
-										state === "ahead" ? "bg-[var(--line-strong)]" : "",
+										"block h-1.5 w-1.5 rounded-[var(--radius-full)] transition-colors duration-[var(--duration-base)] ease-[var(--ease)]",
+										state === "ahead" ? "bg-[var(--line-strong)]" : "bg-[var(--accent)]",
+									].join(" ")}
+								/>
+								{/* The current step's bar is drawn over the dot at its full width
+								 * and grows out of it with a scale, so nothing is laid out again. */}
+								<span
+									aria-hidden
+									className={[
+										"absolute inset-0 my-auto h-1.5 rounded-[var(--radius-full)] bg-[var(--accent)] transition-[scale,opacity] duration-[var(--duration-base)] ease-[var(--ease)]",
+										state === "current" ? "scale-x-100 opacity-100" : "scale-x-[0.3] opacity-0",
 									].join(" ")}
 								/>
 							</button>
@@ -336,7 +344,13 @@ function AboutYouStep({ onBack, onContinue }: StepProps) {
 				</StepHead>
 
 				{profile === null ? (
-					<p className="mt-4 text-[var(--ink-muted)]">{loadError ?? "Loading."}</p>
+					loadError ? (
+						<p className="mt-4 text-[var(--risk)]">{loadError}</p>
+					) : (
+						<div className="mt-4">
+							<CardSkeleton lines={4} framed={false} />
+						</div>
+					)
 				) : (
 					<StepFields>
 						<div className="grid grid-cols-2 gap-4">
@@ -417,7 +431,13 @@ function BusinessStep({ onBack, onContinue }: StepProps) {
 				</StepHead>
 
 				{profile === null ? (
-					<p className="mt-4 text-[var(--ink-muted)]">{loadError ?? "Loading."}</p>
+					loadError ? (
+						<p className="mt-4 text-[var(--risk)]">{loadError}</p>
+					) : (
+						<div className="mt-4">
+							<CardSkeleton lines={4} framed={false} />
+						</div>
+					)
 				) : (
 					<StepFields>
 						<Field

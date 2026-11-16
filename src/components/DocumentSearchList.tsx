@@ -1,6 +1,8 @@
 import type { DocumentRecord } from "@shared/types";
-import { AttachmentIcon } from "./AttachmentIcon";
+import { attachedNameOf } from "../lib/file-type";
+import { FileTypeIcon } from "./FileTypeIcon";
 import { Checkbox } from "./Checkbox";
+import { RowsSkeleton } from "./RowsSkeleton";
 
 type DocumentSearchListProps = {
 	documents: DocumentRecord[] | null;
@@ -19,9 +21,9 @@ type DocumentSearchListProps = {
 	emptyText: string;
 };
 
-/** Where it is kept, the way a row says it: "Acme / Website", or "Not linked". */
+/** Where it is kept, the way a row says it: "Acme / Website", or "Files". */
 function placeOf(record: DocumentRecord): string {
-	return [record.clientName, record.projectName].filter(Boolean).join(" / ") || "Not linked";
+	return [record.clientName, record.projectName].filter(Boolean).join(" / ") || "Files";
 }
 
 /** Every word typed appears somewhere in the title or where it is kept. */
@@ -48,7 +50,7 @@ export function DocumentSearchList({
 	onPick,
 	emptyText,
 }: DocumentSearchListProps) {
-	if (documents === null) return <p className="px-2 py-2 text-[var(--ink-muted)]">Loading.</p>;
+	if (documents === null) return <RowsSkeleton rows={4} divided={false} trailing={false} />;
 	if (documents.length === 0) {
 		return <p className="px-2 py-2 text-sm text-[var(--ink-muted)]">{emptyText}</p>;
 	}
@@ -79,10 +81,10 @@ export function DocumentSearchList({
 					) : null}
 					<ul>
 						{group.rows.map((record) => {
-							const name = `${record.title}.pdf`;
+							const name = attachedNameOf(record);
 							const body = (
 								<>
-									<AttachmentIcon filename={name} mimeType="application/pdf" />
+									<FileTypeIcon filename={name} mimeType={record.latestVersion?.mediaType ?? "application/pdf"} />
 									<span className="min-w-0 flex-1">
 										<span className="block truncate text-dense">{record.title}</span>
 										<span className="block truncate text-micro text-[var(--ink-muted)]">

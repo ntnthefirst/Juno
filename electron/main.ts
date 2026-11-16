@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, BrowserWindow, globalShortcut, Menu, nativeTheme, shell } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, Menu, nativeImage, nativeTheme, powerSaveBlocker, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -19,7 +19,6 @@ import {
 	mailDir,
 	outboxFilesDir,
 	projectsDir,
-	templateAssetsDir,
 	userDataDir,
 } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
@@ -29,14 +28,19 @@ import * as agentAudit from "./main/services/agent-audit";
 import { configureClaudeDesktop } from "./main/services/claude-desktop";
 import { serverStatus, startAgentSurface, startAutomationScheduler, stopAgentSurface } from "./main/mcp";
 import { registerAppScheme, registerAppSchemePrivileges } from "./main/scheme";
-import { configureBackups, setCloseHook } from "./main/services/backup";
-import { configureDocuments } from "./main/services/document-pdf";
-import { ensureTemplatesSeeded } from "./main/services/document-templates";
+import { configureBackups, createBeforeMigrations, setCloseHook } from "./main/services/backup";
+import { configureDocuments, printPdf } from "./main/services/document-pdf";
+import { configureConversion } from "./main/services/document-convert";
+import * as documentWorking from "./main/services/document-working";
+import { configureWorkingCopies } from "./main/services/document-working";
+import { configurePreview, forgetPreviews } from "./main/services/file-preview";
+import { convertWithWord, wordInstalled } from "./main/services/word-convert";
 import { configureDocumentStorage } from "./main/services/documents";
 import { apply as applyDocumentsFolder, configureDocumentsFolder } from "./main/services/documents-folder";
 import { configurePageImages } from "./main/services/page-images";
+import { configureClipboard, memoryClipboard } from "./main/services/clipboard";
+import { systemClipboard } from "./main/services/clipboard-system";
 import { configureOutboxFiles, prune as pruneOutboxFiles } from "./main/services/mail-outbox-files";
-import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
 import * as projectRunner from "./main/services/project-runner";
 import * as notifications from "./main/services/notifications";
@@ -51,6 +55,7 @@ import { configureMailboxSource } from "./main/services/mail-source";
 import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
+import * as mailActions from "./main/services/mail-actions";
 import * as mailRules from "./main/services/mail-rules";
 import * as mailSync from "./main/services/mail-sync";
 import * as calendarSubscriptions from "./main/services/calendar-subscriptions";
@@ -120,6 +125,8 @@ if (!app.requestSingleInstanceLock()) {
 		// The folder new documents go to is the owner's to choose, and an unusable
 		// one falls back to the default. Page pictures stay under the default.
 		configurePageImages(documentsDir());
+		// A smoke run copies and pastes, and must not overwrite what the person running it has copied.
+		configureClipboard(process.env.JUNO_SMOKE ? memoryClipboard() : systemClipboard);
 		configureDocumentsFolder({
 			defaultDirectory: documentsDir(),
 			apply: (directory) => {
@@ -128,7 +135,21 @@ if (!app.requestSingleInstanceLock()) {
 			},
 		});
 		await applyDocumentsFolder();
-		configureTemplateAssets(templateAssetsDir());
+		// The three things a file explorer needs Electron for, handed in so the
+		// services stay testable in plain Node (decisions 75 to 77): opening a
+		// working copy, a thumbnail Windows draws, and a printer and Word for PDF.
+		configureWorkingCopies({ openPath: (path) => shell.openPath(path) });
+		configurePreview({
+			thumbnail: async (path) => {
+				const image = await nativeImage.createThumbnailFromPath(path, { width: 512, height: 512 });
+				return image.isEmpty() ? null : image.toPNG();
+			},
+		});
+		configureConversion({
+			printHtml: ({ title, bodyHtml }) => printPdf({ title, bodyHtml, isSpecimen: false }),
+			wordAvailable: wordInstalled,
+			convertWithWord,
+		});
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
 		configureOutboxFiles(outboxFilesDir());
@@ -140,12 +161,14 @@ if (!app.requestSingleInstanceLock()) {
 			mailDir: mailDir(),
 			isPaused: () => lock.isLocked(),
 			afterInbox: (accountId, db) => mailRules.runForAccount(accountId, db, { isPaused: () => lock.isLocked() }),
+			// A message read while the server was out of reach is marked read there now.
+			afterPass: (accountId, db) => mailActions.pushPendingSeen(accountId, db),
 		});
 		configureMailboxSource(openImapSource);
 		configureMailboxWriter(openImapWriter);
 		configureMailTransport(smtpTransport, imapSentAppender);
 		// The sender pauses with the lock too, and renders a PDF for an attached
-		// document through the same path the documents screen uses.
+		// document through the same path a Documents tab uses.
 		mailSend.configureMailSend({
 			isPaused: () => lock.isLocked(),
 			renderDocumentPdf: async (id) => (await documentActions.renderPdf(id)).pdfPath,
@@ -162,7 +185,20 @@ if (!app.requestSingleInstanceLock()) {
 		const db = openDb(databasePath());
 
 		splashStep("Applying migrations");
-		const migrations = runMigrations(getConnection());
+		// A copy first, and no migration if it cannot be made. A failure here would
+		// otherwise be an unhandled rejection behind a splash that never closes, so
+		// the owner is told what happened and the app exits.
+		let migrations: ReturnType<typeof runMigrations>;
+		try {
+			await createBeforeMigrations(getConnection());
+			migrations = runMigrations(getConnection());
+		} catch (cause) {
+			closeSplash();
+			const reason = cause instanceof Error ? cause.message : String(cause);
+			dialog.showErrorBox("Juno could not start", reason);
+			app.exit(1);
+			return;
+		}
 		if (migrations.applied.length > 0) {
 			console.log(`Applied ${migrations.applied.length} migration(s):`, migrations.applied);
 		}
@@ -178,11 +214,6 @@ if (!app.requestSingleInstanceLock()) {
 					`${seeded.setsCreated} set(s), ${seeded.itemsCreated} new item(s), ` +
 					`${seeded.itemsUpdated} updated`,
 			);
-		}
-
-		const templateSeed = await ensureTemplatesSeeded(db);
-		if (templateSeed.created || templateSeed.updated) {
-			console.log(`Templates: ${templateSeed.created} created, ${templateSeed.updated} updated`);
 		}
 
 		const mailTemplateSeed = await ensureMailTemplatesSeeded(db);
@@ -228,6 +259,11 @@ if (!app.requestSingleInstanceLock()) {
 		setCloseHook(() => closeDb());
 
 		lock.start(await settings.getLock());
+		// A preview address handed out before a lock must not answer after it:
+		// the window dropped what it showed, and the file is read again on unlock.
+		lock.onChange((state) => {
+			if (state.locked) forgetPreviews();
+		});
 
 		splashStep("Starting services");
 		registerAllIpc();
@@ -271,6 +307,17 @@ if (!app.requestSingleInstanceLock()) {
 		installNotifications(isDev);
 		startBadge();
 		onMainWindowCreated((created) => created.once("ready-to-show", () => void syncBadge()));
+		// An edit saved in another app comes back as a version when the person
+		// returns to Juno (decision 75). Not while locked, and not more than once
+		// every few seconds however often focus comes and goes.
+		let lastEditCheck = 0;
+		onMainWindowCreated((created) =>
+			created.on("focus", () => {
+				if (lock.isLocked() || Date.now() - lastEditCheck < 3000) return;
+				lastEditCheck = Date.now();
+				void documentWorking.checkAll().catch(() => undefined);
+			}),
+		);
 		await desktop.applyShortcut();
 
 		// In development only the mail host is served; the window comes from Vite.
@@ -331,7 +378,7 @@ if (!app.requestSingleInstanceLock()) {
 						const startupNotice = (await window.webContents.executeJavaScript(
 							`new Promise(async (resolve) => {
 								for (let i = 0; i < 30; i++) {
-									const toast = document.querySelector("[role=status]");
+									const toast = document.querySelector("[data-toast]");
 									if (toast && toast.textContent.includes("MCP server enabled on http://127.0.0.1:")) {
 										return resolve(toast.textContent);
 									}
@@ -395,7 +442,7 @@ if (!app.requestSingleInstanceLock()) {
 									{ name: "projects", nav: "projects", text: ["No projects yet"] },
 									{ name: "reminders", nav: null, text: [] },
 									{ name: "notes", nav: "notes", text: ["No notes yet"] },
-									{ name: "documents", nav: "documents", text: ["No documents yet"] },
+									{ name: "files", nav: "files", text: ["No files yet", "Add files"] },
 									{ name: "mail", nav: "mail", text: ["No mail accounts yet"] },
 								];
 								for (const step of emptyChecks) {
@@ -449,6 +496,17 @@ if (!app.requestSingleInstanceLock()) {
 								console.log("SMOKE_DEMO empty states=ok");
 							}
 
+							// A contract printed the way Convert to PDF prints, kept in the walk below.
+							const offerPdf = (
+								await printPdf({
+									title: "Ontwikkelovereenkomst",
+									bodyHtml:
+										"<h1>Ontwikkelovereenkomst</h1><p>Tussen Juno en obet, voor het ontwerp en de bouw van een website.</p>" +
+										"<h2>Artikel 1. Omvang</h2><p>Het ontwerp, de bouw en de oplevering van de site, met drie rondes feedback.</p>" +
+										"<h2>Artikel 2. Prijs</h2><p>De prijs is 2 100,00 euro, te betalen bij oplevering.</p>",
+									isSpecimen: false,
+								})
+							).toString("base64");
 							const created = (await window.webContents.executeJavaScript(`(async () => {
 								const b = window.juno;
 								const statuses = await b.reference.getSet("client_status");
@@ -483,118 +541,19 @@ if (!app.requestSingleInstanceLock()) {
 									{ type: "text", text: "" },
 								] });
 								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
-								// Phase 1: generate a document through the same bridge the
-								// interface uses, so the smoke run covers it too.
-								// A first install holds one document template and no other: the
-								// example, written as an ordinary template. Nothing here may look it
-								// up by key, because that is not how anyone finds it.
-								const seededTemplates = await b.templates.list();
-								if (seededTemplates.length !== 1) throw new Error("Smoke: a first install should hold exactly one document template, found " + seededTemplates.length);
-								const tpl = seededTemplates[0];
-								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.canvas || tpl.canvas.layout.children.length < 2 || tpl.inputs.length === 0) {
-									throw new Error("Smoke: the example is not an unreviewed template on the canvas that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.canvas?.layout.children.length, inputs: tpl.inputs.length }));
-								}
-								const exampleValues = Object.fromEntries(tpl.inputs.map((input) => [input.key, input.defaultValue ?? "het ontwerp en de bouw van een website"]));
-								const gen = await b.documents.generate({
-									clientId: made[0].id, templateId: tpl.id, projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
-									extras: exampleValues,
+								// Phase 1: a contract kept under the client and its project, as a
+								// file brought in through the same bridge the interface uses. The
+								// PDF was printed by the main process below, so the print path is
+								// covered too.
+								const offerBytes = Uint8Array.from(atob(${JSON.stringify(offerPdf)}), (c) => c.charCodeAt(0));
+								const offer = await b.documents.importFile({
+									source: { kind: "bytes", fileName: "Ontwikkelovereenkomst.pdf", data: offerBytes },
+									clientId: made[0].id,
+									projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
 								});
-								// Every placeholder answered by the records and the inputs above. A
-								// marker left in the example would be printed in the first document
-								// anyone makes from it.
-								if (gen.missing.length !== 0) throw new Error("Smoke: the example left placeholders unresolved: " + gen.missing.join(", "));
-								if (!gen.document.isSpecimen) throw new Error("Smoke: a document from an unreviewed template is not marked as a specimen");
-								// A hand-written document template, HTML only, for the same reason as
-								// the mail one further down: the walk reads it in the code view and starts a
-								// page layout on it, and the example is already laid out.
-								await b.templates.create({
-									name: "Handgeschreven overeenkomst",
-									bodyHtml: "<h1>Overeenkomst</h1><p>Tussen {{ owner.businessName }} en {{ client.name }}.</p>",
-								});
-								// A template laid out on paper, which fills in what it asks for and
-								// nothing else. Printed through the bridge before anyone is chosen to
-								// receive it, then generated for a client, which must give a document
-								// that says what was typed and nothing taken from the client.
-								const paperTemplate = await b.templates.create({ name: "Offerte op papier" });
-								if (!paperTemplate.canvas) throw new Error("Smoke: a new document template is not laid out on paper");
-								const firstPage = paperTemplate.canvas.layout.children[0];
-								if (!firstPage || firstPage.kind !== "container") throw new Error("Smoke: a new canvas has no page");
-								const scopeText = {
-									id: "smoke-scope", kind: "text", tag: "p", grow: 0, alignSelf: "auto", hidden: false, actions: [],
-									html: "Omvang: {{document.omvang}}",
-									text: { color: null, fontFamily: null, fontSize: null, lineHeight: null, letterSpacing: null, weight: "normal", italic: false, decoration: "none", transform: "none", align: "left", verticalAlign: "top" },
-									box: { ...firstPage.box, fill: null, padding: { top: 0, right: 0, bottom: 0, left: 0 }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, width: null, minHeight: null, clip: false },
-								};
-								await b.templates.update(paperTemplate.id, {
-									inputs: [{ key: "omvang", label: "Omvang", kind: "textarea", required: true }],
-									canvas: { ...paperTemplate.canvas, layout: { ...paperTemplate.canvas.layout, children: [{ ...firstPage, children: [scopeText] }] } },
-								});
-								const printedPaper = await b.templates.renderPdf({ templateId: paperTemplate.id, values: { omvang: "Een website" } });
-								if (printedPaper.missing.length !== 0 || String.fromCharCode(...printedPaper.pdf.slice(0, 4)) !== "%PDF") {
-									throw new Error("Smoke: a canvas template did not print: " + printedPaper.missing.join(", "));
-								}
-								// A long text on one page with a picture the template keeps, for the
-								// editor's page flow and the picture route below.
-								const longTemplate = await b.templates.create({ name: "Lange tekst op papier" });
-								const longPage = longTemplate.canvas.layout.children[0];
-								const pixel = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
-								const logo = await b.templates.assets.add({ templateId: longTemplate.id, fileName: "logo.png", data: pixel });
-								const logoBlock = { id: "smoke-logo", kind: "image", src: logo.token, alt: "Logo", width: 48, align: "left", grow: 0, alignSelf: "start", hidden: false, actions: [], box: scopeText.box };
-								const paragraphs = Array.from({ length: 70 }, (_, index) => ({ ...scopeText, id: "smoke-long-" + index, html: "Artikel " + (index + 1) + ". Deze tekst loopt door tot ver voorbij de onderkant van het blad." }));
-								await b.templates.update(longTemplate.id, {
-									canvas: { ...longTemplate.canvas, layout: { ...longTemplate.canvas.layout, children: [{ ...longPage, children: [logoBlock, ...paragraphs] }] } },
-								});
-								// A component placed in a template (decision 65): a letterhead that
-								// asks for a reference, with a picture it keeps, placed with a value.
-								// Its text has to reach the template's PDF and its generated document.
-								const letterhead = await b.templates.components.create({
-									name: "Briefhoofd",
-									inputs: [{ key: "reference", label: "Referentie", kind: "text", required: true }],
-									root: {
-										id: "smoke-letterhead", kind: "container", tag: "div", hidden: false, name: "Briefhoofd", alignSelf: "auto", grow: 0,
-										layout: { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 4, wrap: false },
-										box: { ...scopeText.box }, actions: [],
-										children: [{ ...scopeText, id: "smoke-letterhead-text", html: "<strong>Juno</strong><br>Onze referentie: {{document.reference}}" }],
-									},
-								});
-								const letterheadLogo = await b.templates.components.assets.add({ componentId: letterhead.id, fileName: "logo.png", data: pixel });
-								await b.templates.components.update(letterhead.id, {
-									root: { ...letterhead.root, children: [{ ...letterhead.root.children[0], id: "smoke-letterhead-text" }, { ...logoBlock, id: "smoke-letterhead-logo", src: letterheadLogo.token }] },
-								});
-								const placedTemplate = await b.templates.create({ name: "Offerte met briefhoofd" });
-								const placedPage = placedTemplate.canvas.layout.children[0];
-								await b.templates.update(placedTemplate.id, {
-									canvas: {
-										...placedTemplate.canvas,
-										layout: {
-											...placedTemplate.canvas.layout,
-											children: [{
-												...placedPage,
-												children: [
-													{ ...letterhead.root, id: "smoke-placement", name: "Briefhoofd", children: [], component: { componentId: letterhead.id, values: { reference: "OFF-2026-14" } } },
-													{ ...scopeText, id: "smoke-placed-text", html: "Omvang: {{document.omvang}}" },
-												],
-											}],
-										},
-									},
-									inputs: [{ key: "omvang", label: "Omvang", kind: "textarea", required: true }],
-								});
-								const placedPdf = await b.templates.renderPdf({ templateId: placedTemplate.id, values: { omvang: "Een website" } });
-								if (placedPdf.missing.length !== 0) throw new Error("Smoke: a template with a component left gaps: " + placedPdf.missing.join(", "));
-								const placedDocument = await b.documents.generate({ clientId: made[0].id, templateId: placedTemplate.id, extras: { omvang: "Een website" } });
-								if (placedDocument.pdfError !== null || !placedDocument.document.bodyHtml.includes("Onze referentie: OFF-2026-14") || !placedDocument.document.bodyHtml.includes("data:image/png;base64,")) {
-									throw new Error("Smoke: the component did not reach the generated document: " + placedDocument.pdfError);
-								}
-								const paperDocument = await b.documents.generate({ clientId: made[0].id, templateId: paperTemplate.id, extras: { omvang: "Een website" } });
-								if (paperDocument.pdfError !== null || !paperDocument.document.bodyHtml.includes("Omvang: Een website")) {
-									throw new Error("Smoke: a canvas template did not generate its document: " + paperDocument.pdfError);
-								}
-								// Generating writes the PDF now, so this call is only here to
-								// prove the explicit path still works. What generating produced is
-								// checked from the main process below, where the file is reachable.
-								if (gen.pdfError !== null) throw new Error("Smoke: generating did not write a PDF, " + gen.pdfError);
-								if (!gen.document.pdfPath) throw new Error("Smoke: the generated document has no PDF path");
-								await b.documents.renderPdf(gen.document.id);
+								if (!offer.pdfPath) throw new Error("Smoke: the contract has no file");
+								// A first install has no document templates any more (decision 82).
+								if ("templates" in b) throw new Error("Smoke: the bridge still offers document templates");
 
 								// Phase 2: a few reminders across the buckets, plus a delivered
 								// project so a suggestion appears.
@@ -641,12 +600,12 @@ if (!app.requestSingleInstanceLock()) {
 								const synced = await b.mail.sync.run();
 								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
 
-								// Phase 4: the generated document sent as an attachment with an
+								// Phase 4: the contract sent as an attachment with an
 								// empty body, by a person, and a second message an agent would
 								// have to wait on.
 								const draft = await b.mail.outbox.createDraft({
 									accountId: mailAccount.id, to: [{ name: "Laura", address: "laura@obet.be" }], subject: "Ontwikkelovereenkomst",
-									bodyText: "", clientId: made[0].id, documentIds: [gen.document.id],
+									bodyText: "", clientId: made[0].id, documentIds: [offer.id],
 								});
 								await b.mail.outbox.send(draft.id);
 								await b.mail.outbox.createDraft({
@@ -765,6 +724,97 @@ if (!app.requestSingleInstanceLock()) {
 							await pageService.update(created.quotePageId, {
 								blocks: [...current.blocks.slice(0, at), picture, ...current.blocks.slice(at)],
 							});
+
+							// Files of each kind a Documents tab previews, kept under the first
+							// client the way a drop keeps them: a picture, a Word file, a
+							// workbook and a note, and one file kept under nothing, which the
+							// Overview lists as a file without a client.
+							// Made here rather than taken from the test fixtures, which the build leaves out.
+							const { default: JSZip } = await import("jszip");
+							type ExcelJs = typeof import("exceljs");
+							const excel = await import("exceljs").then((module) => (module as ExcelJs & { default?: ExcelJs }).default ?? module);
+							const escapeXml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+							const fixtures = {
+								docxBytes: async (paragraphs: string[]) => {
+									const zip = new JSZip();
+									zip.file(
+										"[Content_Types].xml",
+										'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+									);
+									zip.file(
+										"_rels/.rels",
+										'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+									);
+									zip.file(
+										"word/document.xml",
+										'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+											paragraphs.map((text) => `<w:p><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`).join("") +
+											"</w:body></w:document>",
+									);
+									return zip.generateAsync({ type: "uint8array" });
+								},
+								xlsxBytes: async (sheets: Record<string, (string | number)[][]>) => {
+									const workbook = new excel.Workbook();
+									for (const [name, rows] of Object.entries(sheets)) workbook.addWorksheet(name).addRows(rows);
+									return new Uint8Array(await workbook.xlsx.writeBuffer());
+								},
+							};
+							const imports = await import("./main/services/document-import");
+							const ownerId = current.document.clientId;
+							const keep = (fileName: string, data: Uint8Array) =>
+								imports.importFile({ source: { kind: "bytes", fileName, data, via: "drop" }, clientId: ownerId });
+							await keep("Werktekening tafel.png", new Uint8Array(png));
+							await keep(
+								"Bestek keuken.docx",
+								await fixtures.docxBytes([
+									"Bestek voor de keuken in massieve eik.",
+									"De kasten worden op maat gemaakt en ter plaatse geplaatst.",
+									"Werkblad in eik van 38 mm, afgewerkt met hardwasolie.",
+								]),
+							);
+							await keep(
+								"Prijzen hout 2026.xlsx",
+								await fixtures.xlsxBytes({
+									Hout: [
+										["Soort", "Dikte", "Prijs per m2"],
+										["Eik", "38 mm", 92],
+										["Essen", "32 mm", 74],
+										["Beuk", "27 mm", 58],
+									],
+									Afwerking: [
+										["Product", "Inhoud", "Prijs"],
+										["Hardwasolie", "1 l", 32],
+									],
+								}),
+							);
+							await keep(
+								"Afspraken levering.txt",
+								new TextEncoder().encode(
+									"Levering van de eiken tafel op vrijdag in de voormiddag.\nDe planken krijgen een week om te wennen in de werkplaats.\nBel De Smet een dag vooraf.\n",
+								),
+							);
+							// The owner's own files, kept under no client and no project: Files.
+							const own = (fileName: string, data: Uint8Array) =>
+								imports.importFile({ source: { kind: "bytes", fileName, data, via: "drop" } });
+							await own("Bonnetje bouwmarkt.txt", new TextEncoder().encode("Schroeven en lijm, 18,40 euro.\n"));
+							await own("Logo Juno.png", new Uint8Array(png));
+							await own(
+								"Algemene voorwaarden 2026.docx",
+								await fixtures.docxBytes([
+									"Algemene voorwaarden van Juno.",
+									"Een offerte is dertig dagen geldig.",
+									"Facturen worden binnen dertig dagen betaald.",
+								]),
+							);
+							await own("Prijslijst hout 2026.xlsx", await fixtures.xlsxBytes({ Hout: [["Soort", "Prijs per m2"], ["Eik", 92], ["Essen", 74]] }));
+							await (await import("./main/services/pages")).create({
+								title: "Werkplaats checklist",
+								blocks: [
+									{ id: "smoke-check-1", type: "check", text: "Beitels slijpen", done: true },
+									{ id: "smoke-check-2", type: "check", text: "Schroeven en lijm bestellen", done: false },
+								],
+							});
+							console.log("SMOKE_DEMO documents files=4 own=5");
 						}
 
 							// Two files on the project, added through the service rather than
@@ -836,8 +886,9 @@ if (!app.requestSingleInstanceLock()) {
 							console.log(`SMOKE_DEMO agent pending=${waiting.length}`);
 
 							// What a real request carries: a mail to send, a record to change
-							// and a message to cancel, so the Agent screen is drawn with the
-							// records named and the whole mail shown, not with ids.
+							// and a message to delete, so the Agent screen is drawn with the
+							// records named and the whole mail shown, not with ids. An unsent
+							// message is deleted, never cancelled (decision 78).
 							{
 								const accountService = await import("./main/services/mail-accounts");
 								const outboxService = await import("./main/services/mail-outbox");
@@ -862,7 +913,7 @@ if (!app.requestSingleInstanceLock()) {
 										subject: "Herinnering",
 										bodyText: "Hallo.",
 									});
-									await callTool("mail.outbox.cancel", { id: spare.id }, { source: "mcp" });
+									await callTool("mail.outbox.delete", { id: spare.id }, { source: "mcp" });
 									// One sent by hand while the request waited (it closes on its own),
 									// one rejected, and two reads, so the answered cards and the log show
 									// every kind of row.
@@ -946,39 +997,25 @@ if (!app.requestSingleInstanceLock()) {
 							// contract is several.
 							{
 								const { statSync, readFileSync: readPdfBytes } = await import("node:fs");
-								const generatedRows = await (await import("./main/services/documents")).list({});
-								// Both generated documents are laid out on paper now: the example,
-								// which is two pages, and the small one the walk made itself, which
-								// is one.
-								const generated = generatedRows.find((row) => row.sourceKind === "generated" && row.pdfPath !== null);
-								if (!generated?.pdfPath) throw new Error("Smoke: no generated document has a PDF");
-								const size = statSync(generated.pdfPath).size;
+								const keptRows = await (await import("./main/services/documents")).list({});
+								const printed = keptRows.find((row) => row.title === "Ontwikkelovereenkomst" && row.pdfPath !== null);
+								if (!printed?.pdfPath) throw new Error("Smoke: the printed contract has no PDF");
+								const size = statSync(printed.pdfPath).size;
 								if (size < 2000) {
-									throw new Error(`Smoke: the generated PDF is ${size} bytes, which is a blank page`);
+									throw new Error(`Smoke: the printed PDF is ${size} bytes, which is a blank page`);
 								}
-								const head = readPdfBytes(generated.pdfPath).subarray(0, 5).toString("latin1");
+								const head = readPdfBytes(printed.pdfPath).subarray(0, 5).toString("latin1");
 								if (head !== "%PDF-") {
-									throw new Error(`Smoke: the generated file starts with ${head}, not a PDF header`);
+									throw new Error(`Smoke: the printed file starts with ${head}, not a PDF header`);
 								}
-								// A template on paper prints one sheet per page, at the paper's
-								// size, whatever A4 the printer was told to default to. The example
-								// is two pages, and one that ran onto a third sheet is a layout
-								// fault the bytes above would never show.
+								// Printed at A4, whatever the printer was told to default to, on one sheet.
 								const { PDFDocument } = await import("pdf-lib");
-								const onPaper = generatedRows.filter((row) => row.pdfPath !== null && row.bodyHtml.includes("juno-sheets"));
-								const sheetCounts: number[] = [];
-								for (const row of onPaper) {
-									const paperPdf = await PDFDocument.load(readPdfBytes(row.pdfPath!));
-									const { width: sheetWidth, height: sheetHeight } = paperPdf.getPage(0).getSize();
-									if (Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842) {
-										throw new Error(`Smoke: a document on paper printed sheets of ${sheetWidth} x ${sheetHeight}, not A4`);
-									}
-									sheetCounts.push(paperPdf.getPageCount());
+								const printedPdf = await PDFDocument.load(readPdfBytes(printed.pdfPath));
+								const { width: sheetWidth, height: sheetHeight } = printedPdf.getPage(0).getSize();
+								if (Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842 || printedPdf.getPageCount() !== 1) {
+									throw new Error(`Smoke: the contract printed ${printedPdf.getPageCount()} sheets of ${sheetWidth} x ${sheetHeight}, not one A4`);
 								}
-								if (sheetCounts.sort().join() !== "1,1,2") {
-									throw new Error(`Smoke: the example, the small document and the one with a component should print on 2, 1 and 1 sheets, got ${sheetCounts.join(", ")}`);
-								}
-								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheetCounts.join("+")}`);
+								console.log(`SMOKE_DEMO printed pdf=${size} sheets=1`);
 							}
 							window.webContents.reload();
 							await new Promise((r) => {
@@ -1079,6 +1116,9 @@ if (!app.requestSingleInstanceLock()) {
 								target.focus();
 							};
 							front(window);
+							// A machine nobody is sitting at also turns its display off, and an
+							// unlit display composites nothing either, so a front run keeps it on.
+							if (process.env.JUNO_SMOKE_FRONT) powerSaveBlocker.start("prevent-display-sleep");
 
 							// A throwaway user-data directory is a genuinely first install, so
 							// the setup window opens in front of the application (decision 34).
@@ -1276,12 +1316,13 @@ if (!app.requestSingleInstanceLock()) {
 										"Mail",
 										"Drafts",
 										"Notes",
-										"Documents",
+										"Client documents",
+										"Project documents",
+										"Files",
 										"Page",
 										"Agent",
 										"Agent log",
 										"Mail templates",
-										"Document templates",
 									]
 								: ["Clients"];
 							for (const screen of screens) {
@@ -1290,21 +1331,19 @@ if (!app.requestSingleInstanceLock()) {
 									`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 								);
 								// Drafts is a view inside Mail; Week and the event form live inside
-								// Calendar. Reminders is reached from the overview, and the two template
-								// screens from the switch at the top of Mail and Documents. None of
-								// them is a sidebar entry.
+								// Calendar. Reminders are reached from the overview, Styled mail from
+								// Mail, and a client's documents and a page from a client's Documents
+								// tab (decision 81). None of them is a sidebar entry; Files is.
 								const sidebarEntry =
-									screen === "Client record"
+									screen === "Client record" || screen === "Client documents" || screen === "Page"
 										? "Clients"
-										: screen === "Page"
-											? "Documents"
+										: screen === "Project documents"
+											? "Projects"
 										: screen === "Project record" || screen === "Projects as a list"
 											? "Projects"
 											: screen === "Drafts" || screen === "Mail templates"
 												? "Mail"
-												: screen === "Document templates"
-													? "Documents"
-													: screen === "Reminders"
+												: screen === "Reminders"
 														? "Overview"
 														: screen === "Week" || screen === "Event form"
 															? "Calendar"
@@ -1342,9 +1381,77 @@ if (!app.requestSingleInstanceLock()) {
 								await new Promise((r) => setTimeout(r, 800));
 								const inPage: Record<string, string> = {
 									"Reminders": "Reminders",
-									"Document templates": "Templates",
 								};
 								const route = inPage[screen];
+								// A record's Documents tab: the client obet's, or its project's.
+								const openRecordDocuments = (kind: "client" | "project") =>
+									window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const until = async (find, tries = 40) => {
+												for (let at = 0; at < tries; at++) {
+													const found = find();
+													if (found) return found;
+													await wait(150);
+												}
+												return null;
+											};
+											if (${JSON.stringify(kind)} === "client") {
+												const row = await until(() => [...document.querySelectorAll("main table tbody tr button")].find((el) => el.textContent.trim() === "obet"));
+												if (!row) return "no row for the client obet";
+												row.click();
+											} else {
+												const group = document.querySelector("[role=group][aria-label=Layout]");
+												const cards = group ? [...group.querySelectorAll("button")].find((el) => el.getAttribute("aria-label") === "Cards") : null;
+												if (cards) { cards.click(); await wait(400); }
+												const card = await until(() => [...document.querySelectorAll("main ul > li > button")].find((el) => el.textContent.includes("Ontwikkelovereenkomst site")));
+												if (!card) return "no card for the project Ontwikkelovereenkomst site";
+												card.click();
+											}
+											const tab = await until(() => [...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().startsWith("Documents")));
+											if (!tab) return "the record has no Documents tab";
+											tab.click();
+											const listed = await until(() => document.querySelector("main [data-explorer-item]"), 60);
+											return listed ? "ok" : "the Documents tab lists nothing";
+										})()`,
+									) as Promise<string>;
+								if (screen === "Client documents" || screen === "Page") {
+									const opened = await openRecordDocuments("client");
+									if (opened !== "ok") throw new Error(`Smoke: on the way to ${screen}, ${opened}`);
+								}
+								if (screen === "Project documents") {
+									const opened = await openRecordDocuments("project");
+									if (opened !== "ok") throw new Error(`Smoke: on the way to ${screen}, ${opened}`);
+								}
+								if (screen === "Files") {
+									const opened = (await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const rows = () => [...document.querySelectorAll("main [data-explorer-item]")];
+											for (let tries = 0; tries < 40 && !rows().some((el) => el.textContent.includes("Bonnetje bouwmarkt")); tries++) await wait(150);
+											if (!rows().some((el) => el.textContent.includes("Bonnetje bouwmarkt"))) return "Files does not list the file kept under nothing";
+											if (rows().some((el) => el.textContent.includes("Ontwikkelovereenkomst"))) return "Files lists a client's document";
+											const section = document.querySelector("main section[aria-label='Files']");
+											if (!section) return "no Files section";
+											const heading = section.querySelector("h3");
+											if (!heading || heading.textContent.trim() !== "Files") return "the heading is not Files";
+											for (const label of ["New", "Add files"]) {
+												if (![...section.querySelectorAll("button")].some((el) => el.textContent.trim() === label)) return "no " + label + " in the bar";
+											}
+											if (!document.querySelector("header input[aria-label='Search files']")) return "no search in the title bar";
+											// The selection is an explorer's: Ctrl A, then the bar counts it.
+											rows()[0].focus();
+											rows()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }));
+											await wait(300);
+											const count = section.querySelector("[aria-live=polite]")?.textContent.trim() ?? "";
+											if (!/^\\d+ of \\d+ selected$/.test(count)) return "Ctrl A did not select every file: " + count;
+											rows()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(200);
+											return "ok";
+										})()`,
+									)) as string;
+									if (opened !== "ok") throw new Error(`Smoke: Files: ${opened}`);
+								}
 								if (route && !(await pressText(route)))
 									throw new Error(`Smoke: no "${route}" to press on the way to ${screen}`);
 								if (screen === "Mail templates") {
@@ -1385,17 +1492,17 @@ if (!app.requestSingleInstanceLock()) {
 									if (shown !== "ok") throw new Error(`Smoke: notes ${shown}`);
 								}
 								if (screen === "Page") {
-									// A page opens from the Documents list, with its table, and a slash
-									// on the empty last line draws the block menu.
+									// A page opens from its client's Documents tab, with its table, and a
+									// slash on the empty last line draws the block menu.
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 											await wait(500);
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Oak dining table, quote"));
-											if (!row) return "the page is not in the list";
-											if (!row.closest("li").textContent.includes("Page")) return "the row does not say it is a page";
+											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Oak dining table, quote"));
+											if (!row) return "the page is not on its client's Documents tab";
+											if (!row.textContent.includes("Page")) return "the row does not say it is a page";
 											row.click();
-											await wait(900);
+											await wait(1100);
 											const main = document.querySelector("main");
 											if (!main.querySelector("[role=toolbar][aria-label=Format]")) return "no format toolbar";
 											if (!main.querySelector("table")) return "the table is not drawn";
@@ -1417,8 +1524,9 @@ if (!app.requestSingleInstanceLock()) {
 											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
 											setValue.call(findInput, "hardwax");
 											findInput.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(500);
-											if (!main.querySelector("input[data-find]")) return "find did not reach the table cell";
+											// The marks are drawn on an animation frame, which a busy machine can be late with.
+											for (let tries = 0; tries < 20 && !main.querySelector("input[data-find]"); tries++) await wait(150);
+											if (!main.querySelector("input[data-find]")) return "find did not reach the table cell (bar: " + (findInput.parentElement?.parentElement?.textContent ?? "") + ", value " + findInput.value + ", focused " + (document.activeElement === findInput) + ", cells with it " + [...main.querySelectorAll("input")].filter((el) => el.value.toLowerCase().includes("hardwax")).length + ", hidden " + document.visibilityState + ")";
 											document.querySelector("button[aria-label='Close find']")?.click();
 											await wait(300);
 											const lines = [...main.querySelectorAll("[data-block-text]")];
@@ -1520,6 +1628,12 @@ if (!app.requestSingleInstanceLock()) {
 									] as const) {
 										await smokeTime.create({ projectId: ownProject.id, startedAt: `${day}T09:00:00.000Z`, durationMinutes: minutes, note });
 									}
+									// A file of the project's own, so its Documents section has a row to preview from.
+									const smokeImports = await import("./main/services/document-import");
+									await smokeImports.importFile({
+										source: { kind: "bytes", fileName: "Smoke measurements.txt", data: new TextEncoder().encode("Maten van de kast.\n") },
+										projectId: ownProject.id,
+									});
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1534,7 +1648,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
 											const tab = (name) => [...main.querySelectorAll("[role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === name);
-											for (const name of ["Notes", "Mail", "Timeline", "Time", "Calendar"]) {
+											for (const name of ["Notes", "Documents", "Mail", "Timeline", "Time", "Calendar"]) {
 												if (!tab(name)) return "no " + name + " tab";
 											}
 											if (!main.querySelector("button[aria-label='Add to this project']")) return "no Add menu";
@@ -1542,7 +1656,7 @@ if (!app.requestSingleInstanceLock()) {
 											if (!notes) return "no notes editor on the project";
 											if (!notes.textContent.includes("Release notes")) return "the notes editor does not show the stored notes";
 											if (!main.textContent.includes("Details")) return "no details column";
-											if (!main.querySelector("button[aria-label='Add a document']")) return "no documents section on the project";
+											if (main.querySelector("section[aria-label='Project files']")) return "the project files are still on the Notes tab";
 											if (!main.textContent.includes("Repository")) return "the links are not shown";
 											if (!main.textContent.includes("npm run dev")) return "the commands are not shown";
 											if (main.textContent.includes("Dates and reminders")) return "the old dates section is still on the first tab";
@@ -1589,6 +1703,11 @@ if (!app.requestSingleInstanceLock()) {
 											if (!document.querySelector("header button[aria-label='More project actions']")) return "no actions menu";
 											if (!main.querySelector("button[aria-label='Add to this project']")) return "no add menu";
 
+											// The Documents tab holds the documents and, under them, the project's own files.
+											tab("Documents").click();
+											await wait(900);
+											if (!main.querySelector("section[aria-label^='Documents of']")) return "no documents on the project's Documents tab";
+											if (!main.querySelector("section[aria-label='Project files']")) return "the project files are not on the Documents tab";
 											// Where the files are kept is one answer this screen still gives, from the files section.
 											const otherWays = main.querySelector("button[aria-label='Other ways to add a file']");
 											if (!otherWays) return "no other ways to add a file";
@@ -1632,6 +1751,7 @@ if (!app.requestSingleInstanceLock()) {
 										const clickTab = (label: string) =>
 											`const t = [...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === ${JSON.stringify(label)}); t.click(); await new Promise((r) => setTimeout(r, 500));`;
 										await shoot("notes", clickTab("Notes"));
+										await shoot("documents", clickTab("Documents"));
 										await shoot("mail", clickTab("Mail"));
 										await shoot("timeline", clickTab("Timeline"));
 										await shoot("calendar", clickTab("Calendar"));
@@ -1640,6 +1760,43 @@ if (!app.requestSingleInstanceLock()) {
 										await timeService.stop();
 										// The "..." and Add menus are native (decision 59), so they are not photographed.
 									}
+									// A document previewed from the project is drawn over it, and Escape
+									// goes back to the same tab with the focus on the row and the page
+									// scrolled where it was.
+									const projectReturn = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const selectedTab = () => [...document.querySelectorAll("main [role=tab]")].find((el) => el.getAttribute("aria-selected") === "true")?.textContent.trim() ?? null;
+											// The project's documents are on its Documents tab.
+											[...document.querySelectorAll("main [role=tab]")].find((el) => el.textContent.trim().startsWith("Documents"))?.click();
+											await wait(500);
+											let row = null;
+											for (let waited = 0; waited < 4000 && !row; waited += 100) {
+												row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Smoke measurements"));
+												if (!row) await wait(100);
+											}
+											if (!row) return "the project's Documents tab has no row for its file";
+											const tab = selectedTab();
+											row.scrollIntoView({ block: "center" });
+											const scroller = [...document.querySelectorAll("main *")].find((el) => el.scrollTop > 0) ?? null;
+											const top = scroller ? scroller.scrollTop : 0;
+											row.focus();
+											row.click();
+											for (let waited = 0; waited < 4000 && !document.querySelector("[data-full-preview]"); waited += 100) await wait(100);
+											if (!document.querySelector("[data-full-preview]")) return "a click on a document row on the project opened no preview";
+											await wait(400);
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(600);
+											if (document.querySelector("[data-full-preview]")) return "Escape left the preview open";
+											if (!document.querySelector("main [role=tablist]")) return "closing the preview did not return to the project";
+											if (selectedTab() !== tab) return "closing the preview changed the project's tab from " + tab + " to " + selectedTab();
+											if (document.activeElement !== row) return "closing the preview did not give the focus back to the row";
+											if (scroller && Math.abs(scroller.scrollTop - top) > 2) return "closing the preview lost the scroll, " + scroller.scrollTop + " instead of " + top;
+											return "ok";
+										})()`,
+									);
+									if (projectReturn !== "ok") throw new Error(`Smoke: ${projectReturn}`);
+									process.stdout.write("SMOKE_DEMO preview return from a project=ok\n");
 								}
 								if (screen === "Client record") {
 									const opened = await window.webContents.executeJavaScript(
@@ -1653,7 +1810,8 @@ if (!app.requestSingleInstanceLock()) {
 											}
 											if (!row) return "no client rows";
 											row.click();
-											await new Promise((r) => setTimeout(r, 700));
+											// The record reads its details first, which a busy machine takes a while over.
+											for (let waited = 0; waited < 5000 && !document.querySelector("main [role=tablist]"); waited += 250) await new Promise((r) => setTimeout(r, 250));
 											const main = document.querySelector("main");
 											if (!main.querySelector("[role=tablist]")) return "no tabs";
 											// Dates and reminders belong to the client too: the section is
@@ -1725,6 +1883,51 @@ if (!app.requestSingleInstanceLock()) {
 											const image = await capture(window.webContents);
 											writeFileSync(joinPath(shotDir, `client-tab-${tab.toLowerCase()}-${theme}.png`), image.toPNG());
 										}
+										if (tab !== "Documents") continue;
+										// A document previewed from the client's tab is drawn over the
+										// client, and Escape goes back to the same tab with the focus
+										// on the row it was opened from.
+										const previewed = await window.webContents.executeJavaScript(
+											`(async () => {
+												const row = document.querySelector("main [data-explorer-item]");
+												if (!row) return "no row";
+												row.focus();
+												row.click();
+												for (let waited = 0; waited < 4000 && !document.querySelector("[data-full-preview]"); waited += 100) {
+													await new Promise((r) => setTimeout(r, 100));
+												}
+												if (!document.querySelector("[data-full-preview]")) return "a click on a document row on the client opened no preview";
+												window.__previewRow = row.getAttribute("data-explorer-item");
+												return "ok";
+											})()`,
+										);
+										if (previewed === "no row") {
+											process.stdout.write("SMOKE: the client has no document row, so the return from a preview was not checked\n");
+											continue;
+										}
+										if (previewed !== "ok") throw new Error(`Smoke: ${previewed}`);
+										await new Promise((r) => setTimeout(r, 600));
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 400));
+											writeFileSync(joinPath(shotDir, `client-document-preview-${theme}.png`), (await capture(window.webContents)).toPNG());
+										}
+										const returned = await window.webContents.executeJavaScript(
+											`(async () => {
+												document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+												await new Promise((r) => setTimeout(r, 600));
+												if (document.querySelector("[data-full-preview]")) return "Escape left the preview open";
+												const selected = [...document.querySelectorAll("main [role=tab]")].find((el) => el.getAttribute("aria-selected") === "true");
+												if (!selected || !selected.textContent.trim().startsWith("Documents")) return "closing the preview did not return to the client's Documents tab";
+												if (document.activeElement?.getAttribute("data-explorer-item") !== window.__previewRow) return "closing the preview did not give the focus back to the row";
+												return "ok";
+											})()`,
+										);
+										if (returned !== "ok") throw new Error(`Smoke: ${returned}`);
+										process.stdout.write("SMOKE_DEMO preview return from a client=ok\n");
 									}
 								}
 								if (screen === "Agent log") {
@@ -1896,161 +2099,244 @@ if (!app.requestSingleInstanceLock()) {
 									);
 									await new Promise((r) => setTimeout(r, 600));
 								}
-								if (screen === "Documents") {
-									// The search bar and the selection above the table: typed text
-									// narrows the rows, select-all ticks every one left, and both are
-									// cleared again so the screenshot below still shows the list at
-									// rest with everything in it.
-									const searched = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											const search = document.querySelector('input[aria-label="Search documents"]');
-											if (!search) return "no search field";
-											setValue.call(search, "zzz-nothing-matches-zzz");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const main = document.querySelector("main");
-											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the rows";
-											setValue.call(search, "");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const selectAll = document.querySelector('input[aria-label="Select all"]');
-											if (!selectAll) return "no select-all checkbox";
-											selectAll.click();
-											await wait(200);
-											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
-											const clear = document.querySelector('input[aria-label="Clear selection"]');
-											if (!clear) return "select-all left no way to clear the selection";
-											clear.click();
-											await wait(200);
-											return "ok";
-										})()`,
-									)) as string;
-									if (searched !== "ok") throw new Error(`Smoke: documents list ${searched}`);
-
-									// Opening a document opens its PDF: a canvas that painted, and the
-									// column beside it with the versions and the timeline. A viewer that
-									// throws draws a message instead of a canvas, which is what this reads.
-									const viewed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button[type='button']")].find((el) => !el.closest("li").textContent.includes("Page ·"));
-											if (!row) return "no document row to open";
-											row.click();
-											await wait(2000);
-											const aside = document.querySelector("aside[aria-label='Document']");
-											if (!aside) return "no document column";
-											for (const heading of ["Details", "Versions", "Timeline"]) {
-												if (![...aside.querySelectorAll("h3")].some((el) => el.textContent.startsWith(heading))) {
-													return "the column has no " + heading + " section";
-												}
-											}
-											const canvas = document.querySelector("main canvas");
-											if (!canvas || canvas.width === 0) return "the viewer drew no page";
-											if (document.querySelector("main").textContent.includes("Could not open this PDF")) return "the viewer could not open the PDF";
-											if (!aside.querySelector("ol li")) return "the column lists no versions or timeline";
-											return "ok";
-										})()`,
-									)) as string;
-									if (viewed !== "ok") throw new Error(`Smoke: document viewer ${viewed}`);
-									if (shotDir) {
+								if (screen === "Client documents" || screen === "Project documents") {
+									const client = screen === "Client documents";
+									const prefix = client ? "client-documents-" : "project-documents-";
+									const shoot = async (name: string, settle = 400) => {
 										for (const theme of ["light", "dark"] as const) {
 											nativeTheme.themeSource = theme;
 											await window.webContents.executeJavaScript(
 												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 											);
-											await new Promise((r) => setTimeout(r, 400));
-											writeFileSync(
-												joinPath(shotDir, `document-viewer-${theme}.png`),
-												(await capture(window.webContents)).toPNG(),
-											);
+											await new Promise((r) => setTimeout(r, settle));
+											writeFileSync(joinPath(shotDir, `${name}-${theme}.png`), (await capture(window.webContents)).toPNG());
 										}
-									}
-									// Back to the list, the way the record is left with Escape.
-									await window.webContents.executeJavaScript(
-										`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									};
+									const step = async (what: string, script: string) => {
+										const result = (await window.webContents.executeJavaScript(
+											`(async () => {
+												const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+												const rows = () => [...document.querySelectorAll("main [data-explorer-item]")];
+												const row = (text) => rows().find((el) => el.textContent.includes(text));
+												const until = async (find, tries = 40) => {
+													for (let at = 0; at < tries; at++) {
+														const found = find();
+														if (found) return found;
+														await wait(150);
+													}
+													return null;
+												};
+												${script}
+											})()`,
+										)) as string;
+										if (result !== "ok") throw new Error(`Smoke: ${screen} ${what}: ${result}`);
+									};
+
+									// The tab as a list, with the bar the frames draw: the heading and a
+									// count, then the view switch, New and Add files. A client's
+									// list names the project of each document in a column of its own.
+									await step(
+										"list",
+										`const section = document.querySelector("main section[aria-label^='Documents of']");
+										if (!section) return "no Documents tab";
+										const list = section.querySelector("[role=group][aria-label=Layout] button[aria-label=List]");
+										if (!list) return "no view switch on the tab";
+										if (list.getAttribute("aria-pressed") !== "true") list.click();
+										await wait(300);
+										for (const label of ["Add files"]) {
+											if (![...section.querySelectorAll("button")].some((el) => el.textContent.trim() === label)) return "no " + label + " on the tab";
+										}
+										if (!section.querySelector("button[aria-label='New document']")) return "no New on the tab";
+										const headers = [...section.querySelectorAll(".sticky > *")].map((el) => el.textContent.trim());
+										const wanted = ${JSON.stringify(client)} ? ["Name", "Project", "Type", "Size", "Modified", "Status", "Versions"] : ["Name", "Type", "Size", "Modified", "Status", "Versions"];
+										if (headers.join(",") !== wanted.join(",")) return "the columns are " + headers.join(",");
+										const file = await until(() => row(${JSON.stringify(client ? "Prijzen hout 2026" : "PDF")}));
+										if (!file) return "the tab does not list its files";
+										if (${JSON.stringify(client)} && !rows().some((el) => el.textContent.includes("Ontwikkelovereenkomst site"))) return "the client's list does not name a project's document";
+										const box = file.getBoundingClientRect();
+										if (Math.round(box.height) !== 36) return "a row is " + Math.round(box.height) + "px tall";
+										return "ok";`,
 									);
-									await new Promise((r) => setTimeout(r, 400));
-								}
-								if (screen === "Document templates") {
-									// The example first. It is the one template every first install has,
-									// laid out on the canvas on two pages, so its preview and its editor
-									// are the first things a new owner opens.
-									const inspected = await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Voorbeeld"));
-											if (!row) return "no row for the example";
-											row.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
-											return document.querySelector("main canvas") ? "ok" : "the example has no preview";
-										})()`,
-									) as string;
-									if (inspected !== "ok") throw new Error(`Smoke: the example document template ${inspected}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-example-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Into the editor, where both pages have to be on the canvas.
-									const laidOut = await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas";
-											if (!content.textContent.includes("Voorbeeldovereenkomst")) return "the first page does not show its title";
-											if (!content.textContent.includes("Voor akkoord")) return "the second page does not show its signature block";
-											if (!document.body.textContent.includes("A4 portrait")) return "the sheet does not say its paper";
-											return "ok";
-										})()`,
-									) as string;
-									if (laidOut !== "ok") throw new Error(`Smoke: the example document template editor ${laidOut}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-example-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Back out without a change, to the preview and then to the list, so the
-									// steps after this start where they always did.
-									const returned = await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											// The canvas editor has no back button of its own: Escape leaves it.
+									await shoot(prefix + "list");
+
+									// Ctrl A selects every row, Escape lets go.
+									await step(
+										"selection",
+										`const first = rows()[0];
+										first.focus();
+										first.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }));
+										await wait(200);
+										const held = rows().filter((el) => el.getAttribute("aria-selected") === "true").length;
+										if (held !== rows().length) return "Ctrl A selected " + held + " of " + rows().length;
+										// Cancelable, as a real key press is: the list takes it, and the record behind it stays open.
+										first.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+										await wait(200);
+										if (rows().some((el) => el.getAttribute("aria-selected") === "true")) return "Escape did not let the selection go";
+										return "ok";`,
+									);
+
+									// The same list as tiles, with the pictures they draw.
+									await step(
+										"tiles",
+										`const tiles = document.querySelector("main section[aria-label^='Documents of'] [role=group][aria-label=Layout] button[aria-label=Tiles]");
+										if (!tiles) return "no tile layout";
+										tiles.click();
+										await wait(400);
+										const picture = await until(() => document.querySelector("main [data-explorer-item] img"), 60);
+										if (!picture) return "no tile drew a picture of its file";
+										await wait(900);
+										return "ok";`,
+									);
+									await shoot(prefix + "tiles");
+									await step(
+										"back to the list",
+										`document.querySelector("main section[aria-label^='Documents of'] [role=group][aria-label=Layout] button[aria-label=List]").click();
+										await wait(400);
+										return rows().length > 0 ? "ok" : "the list came back empty";`,
+									);
+
+									// A preview of each kind: a PDF in the viewer, Word as its page, a workbook as cells, a picture.
+									const preview = async (name: string, find: string, ready: string, painted = false) => {
+										await step(
+											`preview of ${name}`,
+											`// Only a preview that is open is closed: Escape on the tab itself would close the record.
+											if (document.querySelector("[data-full-preview]")) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											const target = await until(() => row(${JSON.stringify(find)}));
+											if (!target) return "no row for " + ${JSON.stringify(find)};
+											target.click();
+											const shown = await until(() => document.querySelector("[data-full-preview]"));
+											if (!shown) return "a click did not open the preview";
+											const drawn = await until(() => document.querySelector("[data-full-preview] " + ${JSON.stringify(ready)}), 60);
+											if (!drawn) return "the preview drew no " + ${JSON.stringify(ready)};
+											const details = document.querySelector("[data-full-preview] aside[aria-label=Details]");
+											if (details && ${JSON.stringify(name)} === "pdf") {
+												for (const heading of ["Details", "Versions", "Timeline"]) {
+													if (![...details.querySelectorAll("h3")].some((el) => el.textContent.startsWith(heading))) return "the column has no " + heading;
+												}
+											}
+											await wait(500);
+											return "ok";`,
+										);
+										if (painted) {
+											// A page in a sandboxed frame is opaque to the window and to the main
+											// process alike (no script can be run in it), so the pixels are the proof:
+											// the frame exists well before its text is painted, and a grey page with
+											// nothing on it is the state this waits out.
+											const box = (await window.webContents.executeJavaScript(
+												`(() => { const r = document.querySelector("[data-full-preview] iframe").getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; })()`,
+											)) as { x: number; y: number; width: number; height: number };
+											let inked = false;
+											for (let attempt = 0; attempt < 50 && !inked; attempt++) {
+												const pixels = (await window.webContents.capturePage(box)).toBitmap();
+												// BGRA. Text on the white page is dark and nothing else in the frame is.
+												for (let at = 0; at + 3 < pixels.length && !inked; at += 4) {
+													inked = pixels[at]! < 90 && pixels[at + 1]! < 90 && pixels[at + 2]! < 90;
+												}
+												if (!inked) await new Promise((r) => setTimeout(r, 150));
+											}
+											if (!inked) throw new Error(`Smoke: documents tab preview of ${name}: the page stayed empty`);
+										}
+										await shoot(`${prefix}preview-${name}`);
+									};
+									if (client) {
+										// A preview of each kind: a workbook as cells, a picture, Word as its page, a PDF in the viewer.
+										await preview("sheet", "Prijzen hout 2026", "table");
+										await preview("image", "Werktekening tafel", "img");
+										await preview("word", "Bestek keuken", "iframe", true);
+										await preview("pdf", "PDF", "canvas");
+
+										// Next and Previous go through the list, and Escape closes the preview.
+										await step(
+											"previous and next",
+											`if (document.querySelector("[data-full-preview]")) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(300);
+											const first = await until(() => row("Afspraken levering"));
+											if (!first) return "the tab does not list the note";
+											first.click();
+											if (!(await until(() => document.querySelector("[data-full-preview]")))) return "the preview did not open";
+											const next = await until(() => document.querySelector("[data-full-preview] button[aria-label='Next file']"));
+											const before = document.querySelector("[data-full-preview] h2")?.textContent;
+											if (!next) return "no next file";
+											if (!next.disabled) {
+												next.click();
+												await wait(500);
+												if (document.querySelector("[data-full-preview] h2")?.textContent === before) return "Next did not change the file";
+											}
 											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 											await wait(400);
-											const dialog = document.querySelector("[role=dialog]");
-											if (dialog) {
-												const discard = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
-												if (!discard) return "the editor asked to discard a change nobody made";
-												discard.click();
-												await wait(500);
-											}
-											if (!back()) return "no back action from the preview";
-											back().click();
+											if (document.querySelector("[data-full-preview]")) return "Escape did not close the preview";
+											const selected = [...document.querySelectorAll("main [role=tab]")].find((el) => el.getAttribute("aria-selected") === "true");
+											return selected && selected.textContent.trim().startsWith("Documents") ? "ok" : "closing the preview did not return to the Documents tab";`,
+										);
+
+										// A dropped file that looks like one already kept is shown beside it first.
+										await step(
+											"comparison",
+											`const text = "Levering van de eiken tafel op vrijdag in de voormiddag.\\nDe planken krijgen een week om te wennen in de werkplaats.\\nBel De Smet twee dagen vooraf.\\n";
+											const file = new File([text], "Afspraken levering.txt", { type: "text/plain", lastModified: Date.now() });
+											const transfer = new DataTransfer();
+											transfer.items.add(file);
+											const target = document.querySelector("main section[aria-label^='Documents of']");
+											if (!target) return "no Documents tab to drop on";
+											target.dispatchEvent(new DragEvent("dragover", { dataTransfer: transfer, bubbles: true, cancelable: true }));
+											target.dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true }));
+											// A slow read shows the flow saying what it reads first, so wait for the question itself.
+											const flow = await until(() => {
+												const shown = document.querySelector("[data-add-files]");
+												return shown && [...shown.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version")) ? shown : null;
+											}, 60);
+											if (!flow) return "the dropped file was not compared with the one already kept";
+											if (!flow.textContent.includes("Afspraken levering")) return "the comparison does not name the document it looks like";
+											if (![...flow.querySelectorAll("button")].some((el) => el.textContent.startsWith("Add as a new version"))) return "no way to add it as a version";
+											const panes = await until(() => (flow.querySelectorAll("section pre").length === 2 ? true : null), 60);
+											if (!panes) return "the two files are not shown side by side";
+											return "ok";`,
+										);
+										await shoot("add-compare");
+										// What differs, word by word: "een dag" kept, "twee dagen" coming in.
+										await step(
+											"the words that differ",
+											`const flow = document.querySelector("[data-add-files]");
+											const words = await until(() => [...flow.querySelectorAll("button")].find((el) => el.textContent.trim() === "What differs"), 60);
+											if (!words) return "the comparison offers no way to see what differs";
+											words.click();
+											const view = await until(() => flow.querySelector("section[aria-label='What differs']"), 30);
+											if (!view) return "what differs is not shown";
+											const added = [...view.querySelectorAll("ins")].map((el) => el.textContent).join(" ");
+											const removed = [...view.querySelectorAll("del")].map((el) => el.textContent).join(" ");
+											if (!added.includes("twee dagen") || !removed.includes("een dag")) return "the changed words are not marked: +" + added + " -" + removed;
+											return "ok";`,
+										);
+										await shoot("add-compare-words");
+										await step(
+											"leaving the comparison",
+											`const cancel = [...document.querySelectorAll("[data-add-files] button")].find((el) => el.textContent.trim() === "Cancel");
+											if (!cancel) return "no way to cancel";
+											cancel.click();
 											await wait(500);
-											return document.querySelector("main ul li button") ? "ok" : "did not return to the list";
-										})()`,
-									) as string;
-									if (returned !== "ok") throw new Error(`Smoke: leaving the example document template ${returned}`);
+											return document.querySelector("[data-add-files]") ? "the comparison stayed open" : "ok";`,
+										);
+									} else {
+										await preview("pdf", "PDF", "canvas");
+										await step(
+											"closing the preview",
+											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(400);
+											return document.querySelector("[data-full-preview]") ? "Escape did not close the preview" : "ok";`,
+										);
+									}
 								}
-								if (screen === "Mail templates" || screen === "Document templates") {
+								if (screen === "Mail templates") {
 									// Opens a template so the preview path runs for real: the
 									// list renders, the row opens a preview, and the preview asks the
 									// service to fill the template. A typecheck proves none of that,
-									// and the preview is where a template screen would throw. For the
-									// mail templates it is the hand-written one the walk made, which
-									// the steps after this need.
+									// and the preview is where a template screen would throw. It is
+									// the hand-written one the walk made, which the steps after this
+									// need.
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
-											const wanted = ${JSON.stringify(screen === "Mail templates" ? "Herinnering betaling" : "Handgeschreven overeenkomst")};
+											const wanted = "Herinnering betaling";
 											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes(wanted));
 											if (!row) return "no template row";
 											row.click();
@@ -2065,484 +2351,17 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: ${screen} ${opened}`);
-									if (screen === "Mail templates") {
-										// A mail template is read on a page of its own, and the frame is
-										// as tall as the message rather than a fixed box.
-										await new Promise((r) => setTimeout(r, 600));
-										for (const theme of ["light", "dark"] as const) {
-											nativeTheme.themeSource = theme;
-											await window.webContents.executeJavaScript(
-												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-											);
-											await new Promise((r) => setTimeout(r, 400));
-											writeFileSync(joinPath(shotDir, `mail-template-page-${theme}.png`), (await capture(window.webContents)).toPNG());
-										}
-									}
-								}
-								if (screen === "Document templates") {
-									// The seeded templates carry no page layout, so the editor opens
-									// in its plain-HTML mode first. Starting a layout, dropping a block
-									// on the canvas and reading it back is the only thing in this app
-									// that proves the page compiler's editor half, rather than only the
-									// renderer that turns a finished layout into a PDF.
-									const edited = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											await wait(600);
-											const start = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Start a page layout");
-											if (!start) return "no start-a-page-layout action";
-											start.click();
-											await wait(400);
-											const dialog = document.querySelector("[role=dialog]");
-											if (!dialog) return "no confirmation dialog";
-											const confirm = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start a page layout");
-											if (!confirm) return "the confirmation has no way to continue";
-											confirm.click();
-											await wait(700);
-											if (!document.querySelector("button[aria-label^='Page 1']")) return "no page canvas";
-											const addParagraph = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add paragraph");
-											if (!addParagraph) return "no insert control";
-											addParagraph.click();
-											await wait(300);
-											if (!document.querySelector("button[aria-label='Paragraph block']")) return "the block did not appear on the canvas";
-											return "ok";
-										})()`,
-									)) as string;
-									if (edited !== "ok") throw new Error(`Smoke: document template editor ${edited}`);
-
+									// A mail template is read on a page of its own, and the frame is
+									// as tall as the message rather than a fixed box.
+									await new Promise((r) => setTimeout(r, 600));
 									for (const theme of ["light", "dark"] as const) {
 										nativeTheme.themeSource = theme;
 										await window.webContents.executeJavaScript(
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 400));
-										const image = await capture(window.webContents);
-										writeFileSync(
-											joinPath(shotDir, `document-template-editor-${theme}.png`),
-											image.toPNG(),
-										);
+										writeFileSync(joinPath(shotDir, `mail-template-page-${theme}.png`), (await capture(window.webContents)).toPNG());
 									}
-
-									// Leaves the block unsaved: the back arrow raises its own discard
-									// dialog because the draft now differs from what "Start a page
-									// layout" already wrote, and this is that path exercised for real.
-									const leftEditor = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
-											if (!back) return "no back action";
-											back.click();
-											await wait(400);
-											const dialog = document.querySelector("[role=dialog]");
-											if (dialog) {
-												const discard = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
-												if (!discard) return "no discard action";
-												discard.click();
-												await wait(500);
-											}
-											return document.querySelector("main button") ? "ok" : "did not return to the preview";
-										})()`,
-									)) as string;
-									if (leftEditor !== "ok")
-										throw new Error(`Smoke: leaving the document template editor ${leftEditor}`);
-
-									// Walks Fill (skipped, the seeded templates ask for nothing extra),
-									// Link and Review, stopping short of the generate button.
-									const usedDocument = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
-											if (!use) return "no use action";
-											use.click();
-											await wait(600);
-											const clientLabel = [...document.querySelectorAll("label")].find((el) => el.textContent.trim().startsWith("Client"));
-											if (!clientLabel) return "no client field";
-											const select = document.getElementById(clientLabel.htmlFor);
-											if (!select) return "no client select";
-											const options = [...select.options].map((o) => o.value).filter(Boolean);
-											if (options.length === 0) return "no client to link";
-											const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
-											setter.call(select, options[0]);
-											select.dispatchEvent(new Event("change", { bubbles: true }));
-											await wait(200);
-											const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
-											if (!next) return "no next action";
-											next.click();
-											await wait(900);
-											if (!document.querySelector('main iframe[title="Document preview"]')) return "no rendered review";
-											return "ok";
-										})()`,
-									)) as string;
-									if (usedDocument !== "ok")
-										throw new Error(`Smoke: using a document template ${usedDocument}`);
-
-									const useDocumentImage = await capture(window.webContents);
-									writeFileSync(
-										joinPath(shotDir, `use-document-template.png`),
-										useDocumentImage.toPNG(),
-									);
-
-									// One click undoes Review, landing back on Link; the same control,
-									// now reading "Cancel", is what actually leaves the sequence.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const leave = () => {
-												const b = [...document.querySelectorAll("button")].find((el) => ["Previous", "Cancel"].includes(el.textContent.trim()));
-												if (b) b.click();
-												return Boolean(b);
-											};
-											leave();
-											await wait(400);
-											leave();
-											await wait(400);
-										})()`,
-									);
-								}
-								if (screen === "Document templates") {
-									// The plus beside the heading: asks for a name, creates a
-									// template with one empty page as its body, and opens it straight
-									// into the page editor built on that page rather than the plain-HTML
-									// mode a template with no layout opens into.
-									const created = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											if (!back) return "no back action from the preview";
-											back.click();
-											await wait(500);
-											const plus = document.querySelector('button[aria-label="New document template"]');
-											if (!plus) return "no plus on the list";
-											plus.click();
-											await wait(400);
-											const field = document.querySelector('input[aria-label="New document template"]');
-											if (!field) return "the plus did not open into a name field";
-											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											setValue.call(field, "Smoke document template");
-											field.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(200);
-											field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-											let canvas = null;
-											for (let tries = 0; tries < 20 && !canvas; tries++) {
-												await wait(150);
-												canvas = document.querySelector("[data-canvas-content]");
-											}
-											if (!canvas) {
-												const alert = document.querySelector("[role=alert]");
-												return "the new template did not open on paper" + (alert ? ": " + alert.textContent.trim() : "");
-											}
-											return "ok";
-										})()`,
-									)) as string;
-									if (created !== "ok")
-										throw new Error(`Smoke: creating a document template ${created}`);
-
-									// Leaves without editing further, back to that template's own
-									// preview, which is where the screenshots below expect to be.
-									// The canvas editor has no back button over the canvas: Escape
-									// with nothing selected is the way out, as it is in the mail one.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await new Promise((r) => setTimeout(r, 500));
-										})()`,
-									);
-
-									// One more Back reaches the list, where the search bar and the
-									// selection live. Typed text narrows the rows, select-all ticks
-									// every one left, and both are cleared again so the screenshot
-									// below still shows the list at rest.
-									const searched = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											if (!back) return "no back action from the preview";
-											back.click();
-											await wait(500);
-											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											const search = document.querySelector('input[aria-label="Search document templates"]');
-											if (!search) return "no search field";
-											setValue.call(search, "zzz-nothing-matches-zzz");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const main = document.querySelector("main");
-											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the list";
-											setValue.call(search, "");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const selectAll = document.querySelector('input[aria-label="Select all"]');
-											if (!selectAll) return "no select-all checkbox";
-											selectAll.click();
-											await wait(200);
-											if (!main.textContent.includes("selected")) return "select-all did not select the rows";
-											const clear = document.querySelector('input[aria-label="Clear selection"]');
-											if (!clear) return "select-all left no way to clear the selection";
-											clear.click();
-											await wait(200);
-											return "ok";
-										})()`,
-									)) as string;
-									if (searched !== "ok")
-										throw new Error(`Smoke: document templates list ${searched}`);
-
-									// The template laid out on paper: its preview is the PDF it
-									// prints as, its editor is the canvas with a page of A4 on it,
-									// and using it makes the PDF first and then asks about a client.
-									const paperPreview = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Offerte op papier"));
-											if (!row) return "no row for the template on paper";
-											row.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
-											return document.querySelector("main canvas") ? "ok" : "the preview drew no PDF";
-										})()`,
-									)) as string;
-									if (paperPreview !== "ok") throw new Error(`Smoke: document template on paper ${paperPreview}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-paper-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const paperEditor = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas";
-											if (!content.textContent.includes("Omvang")) return "the page does not show its text";
-											if (!document.body.textContent.includes("A4 portrait")) return "the sheet does not say its paper";
-											return "ok";
-										})()`,
-									)) as string;
-									if (paperEditor !== "ok") throw new Error(`Smoke: document canvas editor ${paperEditor}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-paper-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const paperUse = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
-											if (!use) return "no use action on the preview";
-											use.click();
-											await wait(500);
-											const field = document.querySelector("main textarea");
-											if (!field) return "no field to fill";
-											const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
-											setValue.call(field, "Een website");
-											field.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(200);
-											const make = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Make the PDF");
-											if (!make) return "no make-the-PDF action";
-											make.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("[role=dialog]"); tries++) await wait(150);
-											const dialog = document.querySelector("[role=dialog]");
-											if (!dialog) return "no question about a client once the PDF was made";
-											return "ok";
-										})()`,
-									)) as string;
-									if (paperUse !== "ok") throw new Error(`Smoke: using a document template on paper ${paperUse}`);
-									writeFileSync(joinPath(shotDir, `use-document-template-paper.png`), (await capture(window.webContents)).toPNG());
-									const paperLeft = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const dialog = document.querySelector("[role=dialog]");
-											const keep = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Keep in Juno");
-											if (!keep) return "the question has no way to keep the document";
-											keep.click();
-											await wait(400);
-											const labels = [...document.querySelectorAll("label")].map((el) => el.textContent.trim());
-											if (!labels.some((text) => text.startsWith("Client")) || !labels.some((text) => text.startsWith("Project"))) return "the keep step does not offer a client and a project";
-											const leave = () => {
-												const b = [...document.querySelectorAll("button")].find((el) => ["Previous", "Cancel"].includes(el.textContent.trim()));
-												if (b) b.click();
-												return Boolean(b);
-											};
-											for (let step = 0; step < 3; step++) {
-												leave();
-												await wait(400);
-											}
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											if (back) back.click();
-											await wait(500);
-											return document.querySelector("main ul li button") ? "ok" : "did not return to the list";
-										})()`,
-									)) as string;
-									if (paperLeft !== "ok") throw new Error(`Smoke: leaving the document template on paper ${paperLeft}`);
-
-									// Seventy paragraphs on one A4 page run past its foot: the editor
-									// says so, flows them onto the pages after it when asked, and draws
-									// the picture the template keeps from Juno's own origin.
-									const flowed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Lange tekst op papier"));
-											if (!row) return "no row for the long template";
-											row.click();
-											await wait(700);
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const picture = document.querySelector("[data-canvas-content] img");
-											if (!picture) return "the kept picture is not on the canvas";
-											for (let tries = 0; tries < 20 && !picture.complete; tries++) await wait(100);
-											if (!picture.src.startsWith("app://asset/template/") || picture.naturalWidth !== 1) return "the kept picture did not load: " + picture.src;
-											let flow = null;
-											// The warning is drawn from a measurement taken on an animation frame, and a
-											// window that is covered is not given frames, so this waits for the window as
-											// well as for the editor.
-											for (let tries = 0; tries < 100 && !flow; tries++) {
-												await wait(150);
-												flow = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Flow onto the next pages");
-											}
-											if (!flow) return "no warning that the page runs past the paper";
-											flow.click();
-											for (let tries = 0; tries < 60 && document.querySelector("[role=status]"); tries++) await wait(150);
-											if (document.querySelector("[role=status]")) return "a page still runs past the paper after the flow";
-											const pages = document.body.textContent.match(/(\\d+) pages/);
-											if (!pages || Number(pages[1]) < 2) return "the text was not flowed onto more pages";
-											return "ok";
-										})()`,
-									)) as string;
-									if (flowed !== "ok") throw new Error(`Smoke: flowing a document onto pages ${flowed}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-paper-flowed-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Leaves the flow unsaved: Escape lets go of nothing and goes back.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											if (back) back.click();
-											await wait(500);
-										})()`,
-									);
-								}
-								if (screen === "Document templates") {
-									// Components: placed in a template, listed on their own, and edited in
-									// the same canvas as a template. The list is reached from the button
-									// beside Import Word file.
-									const placed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const find = () => [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Offerte met briefhoofd"));
-											for (let tries = 0; tries < 3 && !find(); tries++) {
-												window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-												await wait(500);
-												[...(document.querySelector("[role=dialog]")?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
-												await wait(300);
-												[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back")?.click();
-												await wait(500);
-											}
-											const row = find();
-											if (!row) return "no row for the template with a component";
-											row.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
-											if (!document.querySelector("main canvas")) return "the preview drew no PDF";
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas";
-											if (!content.textContent.includes("Onze referentie")) return "the placed component's text is not drawn on the page";
-											const logo = content.querySelector("img");
-											if (!logo) return "the component's picture is not drawn";
-											for (let tries = 0; tries < 20 && !logo.complete; tries++) await wait(100);
-											if (!logo.src.startsWith("app://asset/component/") || logo.naturalWidth !== 1) return "the component's picture did not load: " + logo.src;
-											return "ok";
-										})()`,
-									)) as string;
-									if (placed !== "ok") throw new Error(`Smoke: a template with a component ${placed}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-component-placed-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const listed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const dialog = document.querySelector("[role=dialog]");
-											const discard = dialog && [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
-											discard?.click();
-											await wait(500);
-											back()?.click();
-											await wait(500);
-											// Components is in the title bar's more menu, where the design leaves room for it.
-											document.querySelector("button[aria-label='More template actions']")?.click();
-											await wait(300);
-											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim() === "Components");
-											if (!open) return "no components action on the templates list";
-											open.click();
-											await wait(700);
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
-											if (!row) return "the components list has no row for the letterhead";
-											if (!row.textContent.includes("Placed in 1 template")) return "the row does not say where it is placed: " + row.textContent;
-											return "ok";
-										})()`,
-									)) as string;
-									if (listed !== "ok") throw new Error(`Smoke: the components list ${listed}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-components-list-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const editedComponent = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
-											row.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas for the component";
-											if (!content.textContent.includes("referentie")) return "the component does not show its text";
-											return "ok";
-										})()`,
-									)) as string;
-									if (editedComponent !== "ok") throw new Error(`Smoke: the component editor ${editedComponent}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-component-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Out to the list of templates again, so the steps after this start where they always did.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back");
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const dialog = document.querySelector("[role=dialog]");
-											[...(dialog?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
-											await wait(500);
-											[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Templates")?.click();
-											await wait(500);
-										})()`,
-									);
 								}
 								if (screen === "Mail templates") {
 									// One document underneath every view (docs/editors.md section 2):
@@ -4345,7 +4164,9 @@ if (!app.requestSingleInstanceLock()) {
 											const b = document.querySelector("button[aria-label='Week']");
 											if (!b) return "no week button";
 											b.click();
-											await new Promise((r) => setTimeout(r, 600));
+											// The week waits for its items before it slides in, which a
+											// busy machine can take longer than one fixed pause over.
+											for (let tries = 0; tries < 20 && !document.querySelector("[role=button][aria-label]"); tries++) await new Promise((r) => setTimeout(r, 150));
 											return document.querySelector("[role=button][aria-label]") ? "ok" : "no events drawn";
 										})()`,
 									);
@@ -4637,12 +4458,16 @@ if (!app.requestSingleInstanceLock()) {
 
 									const composed = await window.webContents.executeJavaScript(
 										`(async () => {
-											// Writing is an item in the New menu, which is New at the
-											// right of the title bar.
+											// Writing is an item in Mail's own New menu, which is New at
+											// the right of the title bar. It offers what Mail starts and
+											// nothing that belongs to another screen.
 											const plus = document.querySelector("button[aria-label='New']");
 											if (!plus) return "no new button";
 											plus.click();
 											await new Promise((r) => setTimeout(r, 300));
+											const labels = [...document.querySelectorAll("[role=menuitem]")].map((el) => el.textContent.trim());
+											if (!labels.some((label) => label.startsWith("Styled mail"))) return "no Styled mail in Mail's New menu";
+											if (labels.some((label) => label.startsWith("New client"))) return "Mail's New menu still offers a new client";
 											const open = [...document.querySelectorAll("[role=menuitem]")].find((el) => el.textContent.trim().startsWith("New message"));
 											if (!open) return "no new message item";
 											open.click();
@@ -4937,6 +4762,65 @@ if (!app.requestSingleInstanceLock()) {
 									}
 									await mailFrame.executeJavaScript(`document.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))`);
 									await new Promise((r) => setTimeout(r, 500));
+
+									// A conversation filed under a project saves its attachments there in
+									// one click (the chip's own button and the right-click menu), and an
+									// attachment already kept says so and opens its document instead.
+									const smokeProjectsForMail = await import("./main/services/projects");
+									const smokeMailDocuments = await import("./main/services/document-mail");
+									const { entriesFor: smokeMenuEntries } = await import("./main/services/menu-registry");
+									const offerThread = (await listSmokeThreads({ limit: 50 })).find((thread) => thread.subject.includes("Offerte website"));
+									const offerProject = (await smokeProjectsForMail.list({})).find((project) => project.name.includes("Juno"));
+									if (!offerThread || !offerProject) throw new Error("Smoke: no conversation with an attachment, or no project to file it under");
+									await (await import("./main/services/mail-threads")).linkProject(offerThread.id, offerProject.id);
+									const offerFiles = await smokeMailDocuments.forThread(offerThread.id);
+									const offerFile = offerFiles.attachments[0];
+									if (!offerFile || offerFile.document) throw new Error("Smoke: the conversation's attachment is missing, or already a document");
+									const offerMenu = await smokeMenuEntries({ kind: "attachment", id: offerFile.attachmentId, context: null, x: 0, y: 0 });
+									if (!offerMenu.some((entry) => entry.id === "save-to-place" && entry.label === `Save to ${offerProject.name}`)) {
+										throw new Error(`Smoke: the attachment menu offered ${offerMenu.map((entry) => entry.label).join(" | ")}`);
+									}
+									const offerOpened = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back");
+											if (back) { back.click(); await wait(700); }
+											const row = [...document.querySelectorAll("ul li button")].find((el) => el.textContent.includes("Offerte website"));
+											if (!row) return "no row for the conversation with the attachment";
+											row.click();
+											await wait(1200);
+											const trust = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Trust this email");
+											if (trust) { trust.click(); await wait(900); }
+											// The message that carries the file, which may not be the one that opened.
+											const withFile = [...document.querySelectorAll('aside[aria-label="Conversation"] ol button')].find((el) => el.textContent.includes("Nathan") || el.textContent.startsWith("You"));
+											if (!document.querySelector("[data-attachment-chip]") && withFile) { withFile.click(); await wait(900); }
+											for (let i = 0; i < 20 && !document.querySelector("[data-attachment-chip] button[aria-label^='Save to ']"); i++) await wait(150);
+											const save = document.querySelector("[data-attachment-chip] button[aria-label^='Save to ']");
+											if (!save) return "no one-click save on the attachment";
+											if (save.getAttribute("aria-label") !== ${JSON.stringify(`Save to ${offerProject.name}`)}) return "the save names " + save.getAttribute("aria-label");
+											document.querySelector("[data-attachment-chip]").scrollIntoView({ block: "center" });
+											return "ok";
+										})()`,
+									);
+									if (offerOpened !== "ok") throw new Error(`Smoke: attachment save ${offerOpened}`);
+									await shoot("mail-attachment-save");
+									const offerSaved = await window.webContents.executeJavaScript(
+										`(async () => {
+											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+											document.querySelector("[data-attachment-chip] button[aria-label^='Save to ']").click();
+											for (let i = 0; i < 30 && !document.querySelector("[data-attachment-chip] button[title$=' in documents']"); i++) await wait(150);
+											if (!document.querySelector("[data-attachment-chip] button[title$=' in documents']")) return "no In documents mark after saving";
+											const toast = [...document.querySelectorAll("[data-toast]")].find((el) => el.textContent.includes("Saved"));
+											if (!toast || !toast.textContent.includes("Saved")) return "no toast saying it was saved, only: " + [...document.querySelectorAll("[data-toast]")].map((el) => el.textContent.trim().slice(0, 80)).join(" / ");
+											if (![...toast.querySelectorAll("button")].some((el) => el.textContent.trim() === "Show")) return "the toast has no Show";
+											return "ok";
+										})()`,
+									);
+									if (offerSaved !== "ok") throw new Error(`Smoke: attachment save ${offerSaved}`);
+									const offerKept = (await smokeMailDocuments.forThread(offerThread.id)).attachments[0]?.document;
+									if (offerKept?.projectId !== offerProject.id) throw new Error("Smoke: the attachment was not kept under the conversation's project");
+									await shoot("mail-attachment-in-documents");
+									console.log("SMOKE_DEMO attachment saved to the conversation's project in one click");
 								}
 								for (const theme of ["light", "dark"] as const) {
 									nativeTheme.themeSource = theme;
@@ -5852,6 +5736,9 @@ if (!app.requestSingleInstanceLock()) {
 							}
 							console.log("SMOKE_DEMO desktop tray=ok badge=ok shortcut=ok");
 						}
+						// Files are parsed in a worker thread, which only a run of the built
+						// (or packaged) app can show starts at all.
+						await (await import("./main/smoke-files")).checkFileWorker();
 						console.log(`SMOKE_READY migrations=${migrations.applied.length} db=${databasePath()}`);
 						app.quit();
 					})();

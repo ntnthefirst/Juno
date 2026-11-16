@@ -25,10 +25,6 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 	const input = useRef<HTMLInputElement>(null);
 	const inputId = useId();
 
-	useEffect(() => {
-		input.current?.focus();
-	}, []);
-
 	// The clock is read in the interval callback, never during render and never in
 	// the effect body. Reading it while rendering makes the output depend on when
 	// React happens to re-run the component, and setting state straight from an
@@ -37,8 +33,12 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 		if (!lockedOutUntil) return;
 		const id = setInterval(() => {
 			const remaining = Date.parse(lockedOutUntil) - Date.now();
-			if (remaining <= 0) setLockedOutUntil(null);
-			else setSecondsLeft(Math.ceil(remaining / 1000));
+			if (remaining <= 0) {
+				// The wait is over, so "Too many attempts." is no longer true and goes with it.
+				setLockedOutUntil(null);
+				setSecondsLeft(0);
+				setError(null);
+			} else setSecondsLeft(Math.ceil(remaining / 1000));
 		}, 250);
 		return () => clearInterval(id);
 	}, [lockedOutUntil]);
@@ -46,6 +46,13 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 	// Driven by the penalty itself rather than by the countdown, so the button
 	// stays disabled during the quarter second before the first tick lands.
 	const waiting = lockedOutUntil !== null;
+
+	// The field takes the cursor when the screen opens, and again whenever it
+	// is usable after a wrong try or a lockout. Focusing it straight after the
+	// check does nothing, because it is still disabled until the next render.
+	useEffect(() => {
+		if (!busy && !waiting) input.current?.focus();
+	}, [busy, waiting]);
 
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();
@@ -73,9 +80,11 @@ export function LockScreen({ state, onUnlocked }: LockScreenProps) {
 						: "That is not right.",
 				);
 			}
+		} catch {
+			setSecret("");
+			setError("Could not check that. Try again.");
 		} finally {
 			setBusy(false);
-			input.current?.focus();
 		}
 	}
 

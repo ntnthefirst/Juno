@@ -6,6 +6,7 @@ import { messageOf } from "../lib/errors";
 import { requestOpenClient } from "../lib/open-client";
 import { requestOpen } from "../lib/open-entity";
 import { recentDay } from "../lib/recent-day";
+import { RowsSkeleton } from "../components/RowsSkeleton";
 
 type RecentMenuProps = {
 	/** The corner under the button the menu hangs from. */
@@ -130,7 +131,7 @@ export function RecentMenu({ at, onClose }: RecentMenuProps) {
 				{error ? (
 					<p className="px-2 py-3 text-dense text-[var(--risk)]">{error}</p>
 				) : items === null ? (
-					<p className="px-2 py-3 text-dense text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={4} divided={false} trailing={false} />
 				) : items.length === 0 ? (
 					<p className="px-2 py-3 text-dense text-[var(--ink-muted)]">Records you open will be listed here.</p>
 				) : (

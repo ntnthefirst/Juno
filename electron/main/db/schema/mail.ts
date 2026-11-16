@@ -198,6 +198,13 @@ export const mailMessages = sqliteTable(
 		internalDate: text("internal_date").notNull(),
 		size: integer("size"),
 		isSeen: integer("is_seen", { mode: "boolean" }).notNull().default(false),
+		/**
+		 * The read state set here that the server has not been told yet, or null
+		 * when there is nothing to tell it. Reading offline marks the row read at
+		 * once and leaves this set; the next sync writes it to the server and
+		 * clears it, and a sync in between never puts the old state back.
+		 */
+		seenPending: integer("seen_pending", { mode: "boolean" }),
 		isFlagged: integer("is_flagged", { mode: "boolean" }).notNull().default(false),
 		isAnswered: integer("is_answered", { mode: "boolean" }).notNull().default(false),
 		hasAttachments: integer("has_attachments", { mode: "boolean" }).notNull().default(false),
@@ -215,6 +222,7 @@ export const mailMessages = sqliteTable(
 		index("mail_messages_from_idx").on(t.fromAddress),
 		index("mail_messages_body_pending_idx").on(t.folderId, t.bodyFetchedAt),
 		index("mail_messages_deleted_idx").on(t.deletedAt),
+		index("mail_messages_seen_pending_idx").on(t.accountId, t.seenPending),
 	],
 );
 

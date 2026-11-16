@@ -5,6 +5,7 @@ import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { ReleaseNoteEntry } from "./ReleaseNoteEntry";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 function formatWhen(iso: string | null): string {
 	if (!iso) return "Never";
@@ -100,7 +101,7 @@ export function UpdatesSection() {
 			}
 		>
 			{status === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={3} framed={false} />
 			) : (
 				<div className="flex flex-col gap-5">
 					<dl className="flex flex-col gap-2 text-dense">

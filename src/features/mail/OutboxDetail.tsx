@@ -3,7 +3,9 @@ import { useState } from "react";
 import type { MailOutboxMessage } from "@shared/types";
 import { tokensToLabels } from "@shared/mail-variables";
 import { Button } from "../../components/Button";
-import { Dialog } from "../../components/Dialog";
+import { RecordLink } from "../../components/RecordLink";
+import { requestOpenClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 import { messageOf } from "../../lib/errors";
 import { framed } from "../../lib/framed-preview";
 import { formatFull } from "./format";
@@ -11,19 +13,21 @@ import { STATE_LABELS, STATE_TONES } from "./outbox-format";
 
 type OutboxDetailProps = {
 	message: MailOutboxMessage;
+	/** Opens the message in the editor, taking it back to a draft first when it is waiting or failed. */
 	onEdit: (message: MailOutboxMessage) => void;
+	/** Asks, in a dialog, whether to delete it. */
+	onDelete: (message: MailOutboxMessage) => void;
 	onChanged: () => void;
 	onNotice: (message: string) => void;
 };
 
 /**
  * A composed message that is not a draft, and what can be done with it: where
- * it is in the queue, why it failed, and retrying or deleting it. A draft opens
+ * it is in the queue, why it failed, and retrying, editing or deleting it. A draft opens
  * in the editor instead, so there is nothing to read first.
  */
-export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDetailProps) {
+export function OutboxDetail({ message, onEdit, onDelete, onChanged, onNotice }: OutboxDetailProps) {
 	const [busy, setBusy] = useState(false);
-	const [confirmingCancel, setConfirmingCancel] = useState(false);
 	// The window fetches no picture or stylesheet from an address, so the frame
 	// shows a box where each remote picture goes (lib/framed-preview.ts).
 	const preview = message.bodyHtml ? framed(message.bodyHtml, "") : null;
@@ -41,7 +45,9 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 		}
 	}
 
-	const editable = message.state === "draft" || message.state === "pending" || message.state === "failed";
+	// Anything that has not gone out is edited or deleted (decision 78).
+	const editable = message.state !== "sending" && message.state !== "sent";
+	const { clientId, clientName, threadId } = message;
 
 	return (
 		<div className="px-8 py-6">
@@ -69,16 +75,59 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 						<dd data-selectable>{message.cc.map((a) => a.address).join(", ")}</dd>
 					</>
 				) : null}
-				{message.clientName ? (
+				{clientName ? (
 					<>
 						<dt className="text-[var(--ink-muted)]">Client</dt>
-						<dd>{message.clientName}</dd>
+						<dd>
+							{clientId ? (
+								<RecordLink label={`Open ${clientName}`} onOpen={() => requestOpenClient(clientId, clientName)}>
+									{clientName}
+								</RecordLink>
+							) : (
+								clientName
+							)}
+						</dd>
 					</>
 				) : null}
-				{message.attachments.length > 0 ? (
+				{threadId ? (
+					<>
+						<dt className="text-[var(--ink-muted)]">Reply to</dt>
+						<dd>
+							<RecordLink onOpen={() => requestOpen({ kind: "thread", id: threadId, messageId: null })}>The conversation</RecordLink>
+						</dd>
+					</>
+				) : null}
+				{message.attachments.length > 0 || message.files.length > 0 ? (
 					<>
 						<dt className="text-[var(--ink-muted)]">Attached</dt>
-						<dd>{message.attachments.map((a) => a.filename).join(", ")}</dd>
+						<dd className="flex min-w-0 flex-wrap gap-x-2">
+							{/* A document opens its preview, and closing it comes back here. */}
+							{message.attachments.map((attachment) => (
+								<RecordLink
+									key={attachment.id}
+									label={`Preview ${attachment.filename}`}
+									onOpen={() => requestOpen({ kind: "document", id: attachment.documentId, name: attachment.filename })}
+								>
+									{attachment.filename}
+								</RecordLink>
+							))}
+							{message.files.map((file) => {
+								const kept = file.documentId;
+								return kept ? (
+									<RecordLink
+										key={file.id}
+										label={`Preview ${file.fileName}`}
+										onOpen={() => requestOpen({ kind: "document", id: kept, name: file.fileName })}
+									>
+										{file.fileName}
+									</RecordLink>
+								) : (
+									<span key={file.id} className="truncate">
+										{file.fileName}
+									</span>
+								);
+							})}
+						</dd>
 					</>
 				) : null}
 				{message.sentAt ? (
@@ -108,19 +157,8 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 					</Button>
 				) : null}
 				{editable ? <IconButton icon="edit" label="Edit" disabled={busy} onClick={() => onEdit(message)} /> : null}
-				{message.state === "queued" ? (
-					<Button variant="danger" disabled={busy} onClick={() => setConfirmingCancel(true)}>
-						Cancel sending
-					</Button>
-				) : null}
-				{message.state === "cancelled" || message.state === "draft" || message.state === "failed" ? (
-					<IconButton
-						icon="remove"
-						label="Delete"
-						danger
-						disabled={busy}
-						onClick={() => void run(() => window.juno.mail.outbox.remove(message.id), "Removed.")}
-					/>
+				{editable ? (
+					<IconButton icon="remove" label="Delete" danger disabled={busy} onClick={() => onDelete(message)} />
 				) : null}
 			</div>
 
@@ -139,26 +177,6 @@ export function OutboxDetail({ message, onEdit, onChanged, onNotice }: OutboxDet
 					{tokensToLabels(message.bodyText)}
 				</pre>
 			)}
-
-			{confirmingCancel ? (
-				<Dialog title="Cancel sending" onClose={() => setConfirmingCancel(false)} width="narrow">
-					<p className="mt-4 text-[var(--ink-muted)]">
-						Stop sending this message to {message.to.map((a) => a.address).join(", ")}? It stays in the outbox as cancelled.
-					</p>
-					<div className="mt-6 flex justify-end gap-2">
-						<Button onClick={() => setConfirmingCancel(false)}>Keep</Button>
-						<Button
-							variant="danger"
-							onClick={() => {
-								setConfirmingCancel(false);
-								void run(() => window.juno.mail.outbox.cancel(message.id), "Message cancelled.");
-							}}
-						>
-							Cancel message
-						</Button>
-					</div>
-				</Dialog>
-			) : null}
 		</div>
 	);
 }

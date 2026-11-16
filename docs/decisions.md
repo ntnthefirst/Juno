@@ -42,6 +42,10 @@ the code is written against it.
 Migrations are committed and run forward on launch. Never edit a migration that
 has been applied on a real machine; add a new one.
 
+**Amended:** before a launch applies a pending migration to a database that has
+data, a `VACUUM INTO` copy goes to the backups folder (`juno-before-update-*`, last
+three kept), and a failed copy stops the launch.
+
 ## 4. Every row: UUIDv7 id, `owner_id`, `created_at`, `updated_at`, `deleted_at`
 
 Non-negotiable, on every table, from the first migration.
@@ -1539,6 +1543,10 @@ project of the owner's own has no client, and neither does its document.
 Revisit if: a document ever needs more than one project. That is a join table,
 and the single column would have to move into it with its data.
 
+**Amended by decision 81.** The window no longer offers "nothing": a new
+document asks for a client or a project. One kept under neither, from an agent
+or an older install, is listed on the Overview to be given one.
+
 ## 49. A mail carries any file, and Documents keeps the PDF paperwork
 
 Documents is the paperwork with a life of its own: made from a template or
@@ -1921,8 +1929,14 @@ The mail reader's "..." (`reader` context), an unsent message in the list
 too. The drawn `ContextMenu` stays for menus that are not one record's: the New
 menu, filters, view options and overflow lists, a folder or account in the mail
 tree (they depend on expand and sync state only the tree holds), a timeline
-entry or attachment, an automation or request row, the template list (it acts on
-a selection, with counts in the labels) and the text edit fallback.
+entry, an automation or request row, the template list (it acts on
+a selection, with counts in the labels) and the text edit fallback. A mail
+attachment in the reader became native with decision 79 (`attachment`).
+
+A fifth outcome, `notice`, is for an item the main process did that changes
+nothing on screen but is worth a sentence: Open on a signed file says it opened
+read only, in the words Enter uses (`shared/opened.ts`). A screen that lists no
+`notice` handler shows it through `done`.
 
 ## 60. Making an event, client, project or reminder happens in a small window
 
@@ -1994,6 +2008,9 @@ decision and not an edit. It is taken.
 **What would reverse this:** a rail that has to carry a ninth place, which is a
 screen switch instead, as Documents and Templates are.
 
+**Amended by decision 81.** Documents left the rail, so it is six places and
+Settings, and the Agent is Ctrl or Cmd 7.
+
 ## 62. A page is a kind of document
 
 A page in the design sits in the Documents list, belongs to a client or a
@@ -2020,6 +2037,9 @@ project and reads like a document (frame `73:5038`). That is what a document is
 **What would reverse this:** pages that need to be signed or sent as a file. That
 is a render to PDF, which `documents.render_pdf` already does from the body, and
 not a different table.
+
+**Amended by decision 81.** A page is made and listed on a client's or a
+project's Documents tab, and opens over the record there.
 
 ## 63. Toasts, the tray, the badge and one shortcut are Windows only, and go through the same gates
 
@@ -2402,6 +2422,10 @@ and put New at the right of every screen.
 - **New is a text button at the right everywhere.** Where the screen makes one
   kind of record it makes that at once; elsewhere it opens the New menu. With a
   document open the plus at the left stays, as the page frame draws it.
+  Amended on 2026-11-14: a screen that starts several things opens a menu of
+  its own with only those (Mail and Calendar, `NEW_MENUS`), and only
+  Overview keeps the whole menu, because a menu of other screens' records on
+  Mail was noise.
 - **A list's search is in the title bar** (`app/TitleSearch.tsx`), on every
   screen that filters a list. Ctrl or Cmd F focuses it, an open message or page
   keeps the same keys for its own find, and Ctrl or Cmd Shift F opens the
@@ -2511,3 +2535,361 @@ schedule, and CalDAV is still a later phase.
 **What would reverse this:** two-way sync with a calendar server, which would
 make these events editable and their server the owner of them, as decision 23
 already foresees for CalDAV.
+
+## 75. Documents is a file explorer, and a template is a file in it
+
+Amends decisions 19, 41, 49 and 62. Documents held PDFs made from a template
+or imported, with Templates as a second screen behind a switch. The owner
+wants one place that behaves like storage: any kind of file, kept under a
+client, a project or nothing, opened, previewed, copied and signed from the
+same list.
+
+- **A document is any file.** `documents` keeps its rows, its versions and
+  its owner rule (decision 48), and a version is now a file of any type with
+  its own name and media type, not only a PDF. `pdf_path` stays the newest
+  version's path, whatever the type, so everything that opens, sends or
+  attaches "the document" keeps working.
+- **The list is a folder tree.** The root holds a folder per client, a client
+  holds a folder per project, and Unfiled holds what belongs to nobody. Those
+  folders are the owner rule drawn, not rows. The owner may add folders of
+  their own inside any of them (`document_folders`, five standard columns,
+  soft deleted, a document holds a nullable `folder_id`). Moving a document
+  between client and project folders is `documents.link`, so the rule in
+  `document-owner.ts` still decides it. When a project changes client, its
+  folders and documents go with it in the same transaction, and the change is
+  refused when the new client already has a document of one of their titles.
+- **Files stay in Juno's documents folder** (decision 39 and the folder
+  setting), named by Juno, not mirrored as a tree on disk. Show in folder
+  opens the file's real place. Mirroring the tree on disk would make a rename
+  in Explorer and a rename in Juno two truths.
+  Amended: the owner removed Show in folder everywhere; a file is reached in
+  Juno, not in Explorer.
+- **A click previews and a double click opens.** One click opens the full
+  preview over the content area, held for the double-click time so a double
+  click does not show it first; a double click opens the file in the default
+  app of the operating system. Ctrl or Cmd and Shift select without opening.
+  With the list focused, Space previews and Enter opens. The same holds for a
+  mail attachment and a project's file.
+- **An edit made in another app is a new version.** A version's file is never
+  written to after it is kept. Opening the newest version in its default app
+  opens a working copy beside it; when Juno sees that copy's bytes differ from
+  the newest version (on focus and when the document is opened), it keeps them
+  as a new version, from "Edited outside Juno". A signed version is opened
+  read only.
+- **Copy, duplicate, rename, move, delete.** Duplicate makes a new document
+  from the newest version in the same place. Copy to puts a duplicate in
+  another client, project or folder. Rename changes the title and not the
+  files. Delete is the soft delete it was, and still parks for an agent.
+- **Adding is one step.** Drop files anywhere on the screen, or Add, and they
+  land in the folder that is open. When a file looks like one already there
+  (decision 39's text match, or the same name), the two are shown side by
+  side and the person picks: a new version of that one, or a document of its
+  own. Nothing is filed as a version on a guess.
+- **Templates are files in a Templates folder.** The Templates screen and the
+  Documents | Templates switch are gone. Each document template is listed in
+  a Templates folder at the root; opening one opens the canvas editor it
+  always had, and Use makes a document from it the way the template screen
+  did, inputs first, then the place. Components stay reachable from the
+  editor. The template tables, services and tools stay as they are, so
+  nothing an agent or an older document relies on moves. Styled mail stays in
+  Mail.
+- **Pages stay documents** (decision 62) and open in the page view.
+- **Dragging a document out drags a copy of its newest file**, named by its
+  title, in a folder of its own under the system's temporary folder
+  (`services/document-drag.ts`). Not the kept file: an app it is dropped on
+  may open it in place and save into it, and a kept version is never written
+  to. The window names the documents by id; the main process starts the
+  platform's drag. The same drag let go of over a folder in Juno moves the
+  documents, and over the composer attaches them.
+- **Making something in a folder is one write.** Generating from a template
+  and writing a page take the folder (`folder_id` for an agent) and the place
+  rule resolves it, rather than the window making the document and moving it.
+- **A preview asked for from another screen goes back there.** A document
+  opened from a client's or project's Documents tab, a timeline, Recent, the
+  palette, the Agent screen or Mail is previewed over that screen rather than
+  in place of it: the shell keeps the screen mounted under React's
+  `Activity`, hidden, with its effects stopped and its title bar controls
+  withdrawn, and draws Documents in a second sheet on top (`lib/return-to.ts`
+  decides which requests do). Escape, the close button and the way back in
+  the title bar return to it with its tab, its scroll and the row that was
+  focused. Going to a folder from the preview, or deleting the document,
+  leaves Documents where it is. Asked for from Documents itself, a preview
+  lands in its folder as before.
+
+**What would reverse this:** wanting the tree in Explorer as well, which is a
+sync of a folder on disk with its own decision about who wins a rename.
+
+**Amended by decision 81.** There is no tree, no folder of the owner's own and
+no Documents screen any more. The file handling above (any file, a click
+previews and a double click opens, versions from an edit outside Juno, copy,
+duplicate, rename, move, delete, the comparison before a file is kept, the
+drag out) is the same, on a client's and a project's Documents tab. Templates
+is a screen of its own again, and a preview asked for from another screen is
+drawn over it as before, by itself rather than inside Documents.
+
+## 76. Every file has a preview, made in the main process and shown from its own origin
+
+The preview is decided by the file's type, in the main process
+(`services/file-preview.ts`), and handed to the window as something to draw,
+never as a path:
+
+- **PDF** in the existing viewer.
+- **Images** (PNG, JPEG, GIF, WebP, BMP, ICO, AVIF) and **SVG** as an image.
+  An SVG is drawn by `<img>` only, which runs no script in it.
+- **Word** (`.docx`) through Mammoth to HTML, **spreadsheets** (`.xlsx`,
+  `.csv`) through ExcelJS to a table per sheet, **text, Markdown, JSON and
+  code** as text. HTML made from a file is sanitised like a mail body and
+  served from `app://preview/` with its own policy, in an empty sandbox,
+  as decision 20 does for mail.
+- **Apple iWork** (`.pages`, `.numbers`, `.key`) by the preview picture the
+  file carries inside its zip.
+- **Anything else** by the thumbnail Windows makes for it
+  (`nativeImage.createThumbnailFromPath`), with the file's name, size and
+  type. A file with no preview at all says so and offers Open.
+
+Large files are cut: the first sheets and rows of a spreadsheet, the first
+part of a text file, with a line saying what was left out.
+
+Word files, workbooks, CSV and PDF text are parsed, and two files' words
+compared, in a worker thread the main process starts the first time it
+needs one (`workers/file-worker.ts`,
+run by `services/file-reader.ts`), one job at a time and each with a time
+limit of thirty seconds, after which the worker is ended and the person is
+told to open the file in its own app, so a large file never holds a window.
+What a file's ZIP says it unpacks to is still checked in the main process,
+before any bytes are handed over.
+
+## 77. A file becomes a PDF through Word when Word is there, and through Juno when it is not
+
+Signing and Convert to PDF need a PDF. Decision 19 kept a Word converter out
+of the path to a signature because it would be a dependency to install. It
+still is not one: when Microsoft Word is installed, Juno asks it to save the
+file as PDF, which keeps the layout exactly; when it is not, Juno converts the
+file itself, through Mammoth and `printToPDF`, and says that the layout may
+differ. Spreadsheets convert through the table preview, images and SVG are
+placed on a page. The PDF is kept as a new version of the same document, so
+the original stays, and signing then works as decision 38 describes. A
+document from an unreviewed template is still a specimen and still cannot be
+signed.
+
+Word is driven from the main process with a script whose paths come from the
+service, never from the window or an agent, and the run has a time limit.
+
+**What would reverse this:** a converter that ships inside the app and keeps
+Word's layout, which would replace both paths.
+
+## 78. A message that has not gone out is edited or deleted, never cancelled
+
+The outbox had a Cancel that left a message in a fourth state, neither a draft
+nor gone. A draft is now edited or deleted. A message waiting for approval or
+in the queue is taken back to a draft by Edit, which opens it in the composer,
+or deleted. `mail.outbox.cancel` is gone; `mail.outbox.update` changes a
+draft's recipients, subject or body (the Write mail drafts row, like the drafts
+it edits) and `mail.outbox.delete` deletes one (the Delete row, so it parks).
+Messages already cancelled became drafts in the migration that removed the
+state.
+
+## 79. A conversation's attachments go to its project in one click
+
+Docs a company sends belong to the job they are about. Saving one used to be
+a preview, a column of pickers and a comparison every time. Now a
+conversation filed under a project saves its attachments there in one
+click, one filed under a client only under the client, and the place picker
+is one step away (Save to...) for anything else.
+
+- **One service, `services/document-mail.ts`.** `forThread` lists a
+  conversation's attachments, each with the document it already is, and
+  where a one-click save puts the rest; `saveFromThread` saves some or all of
+  them. Both adapters call them: `documents.threadAttachments` and
+  `documents.saveThreadAttachments` over IPC, `documents.list_from_thread`
+  and `documents.import_from_thread` for an agent. The save is in the Change
+  records row like `documents.import_from_mail`, and when it parks the
+  request lists every file it would save.
+- **Each file is checked the way a drop is.** The same bytes as a version
+  already kept are skipped and said so; a file that looks like a document
+  already kept (its words, or its name in that place) is held back and the
+  window opens the comparison (decision 39); anything else is saved straight
+  away, and the toast has Show, which opens it in the explorer.
+- **Already kept is decided by bytes, in the service.** A version recorded
+  from that attachment, or one with the same hash, makes the attachment show
+  "In documents" and open that document instead of offering a second save.
+  The reader, the menu and an agent ask the same function.
+- **A conversation filed under nothing asks where**, starting from the
+  project the mail suggestions would offer (`suggestions.projectForThread`,
+  under the same switch and the same Not now), and offers to file the
+  conversation there in the same call. A link that cannot be made (a project
+  of another client) saves nothing.
+- **The project alone decides the place** when the conversation has one,
+  because a project brings its own client and the conversation's client may
+  be a supplier writing about it.
+- **An attachment's menu is the platform's now** (amends decision 59): the
+  `attachment` kind, with the `untrusted` context leaving Open out for a
+  sender who is not trusted.
+
+**What would reverse this:** a business whose mail about one job routinely
+carries files for another, where the one-click save would file in the wrong
+place more often than the picker costs.
+
+## 80. File types are shown with a bundled third-party icon set
+
+The documents explorer, a mail's attachments, a project's files and the
+preview header used to draw a file by a glyph of its family, tinted from the
+status colours. The owner wanted the icons people already recognise: a Word
+page is the blue one, a PDF the red one, and they mean the same here as they
+do in the rest of the system.
+
+- **One set, the "vivid" icons of file-icon-vectors (MIT).** Flat, one page
+  shape, small files, a label for the type on each, and they read at 16px in
+  a row and at 36px on a tile. The other candidate, the file icons of
+  material-icon-theme (MIT), has a handful of family icons and none for
+  Pages, Numbers or Keynote. The set's classic style is gradient-heavy and
+  five times the size. The files are copied unchanged into
+  `src/assets/file-types/` with the licence in `SOURCES.md`; the package is
+  not a dependency.
+- **They are images, never themed.** Like the provider logos (styling.md
+  section 2) they keep their own colours in both themes and never go through
+  `Icon.tsx`. A set that is hard to read on a surface is fixed by the tile
+  around it, not by recolouring the file.
+- **One component, `components/FileTypeIcon.tsx`,** over a pure mapping in
+  `lib/file-type-icon.ts` (extension first, then the declared type, then a
+  blank page). It replaces `AttachmentIcon`, and the project file rows use it
+  where they drew a kind glyph. A real thumbnail still wins over the icon. A
+  page document keeps Juno's own note glyph, and a folder keeps its own.
+- **Types the set lacks borrow a neighbour.** Numbers takes the spreadsheet
+  icon, an OpenDocument presentation the presentation one, a message the blank
+  page. Drawing those would be our own artwork, which this decision is
+  about avoiding.
+
+**What would reverse this:** the set being withdrawn or its licence changing
+(the copies here stay under the MIT notice), or a design that draws file types
+in the interface's own colours.
+
+## 81. Documents live on a client's and a project's Documents tab
+
+Amends decisions 48, 61, 62 and 75. The owner wanted no folders and no Documents
+place: a file is about a client or a job, so it is found under that client or
+that project, and a tree beside the records was a second way to file the same
+thing.
+
+- **The rail is six places and Settings:** Overview, Calendar, Clients,
+  Projects, Mail, Notes. The digits follow it from the top, so the Agent is
+  Ctrl or Cmd 7. New page, Import a file and Ctrl or Cmd Shift N are gone
+  from the title bar's New: a page and a file are made on a Documents tab,
+  where it is already known whose they are.
+- **A client's and a project's Documents tab is the explorer, for that
+  record.** A list or tiles, sorted by any column, the file type icons, one
+  click previews over the content area and closing comes back to the tab, a
+  double click opens the working copy, F2, Ctrl or Cmd D, C, X and V, Delete
+  with an undo, a drop from Windows with the comparison first, a drag out,
+  and Copy to and Move to through a picker of clients and their projects
+  (`DocumentsPanel.tsx`, `RecordPickerDialog.tsx`). A client's tab lists its
+  projects' documents too, with the project in a column; a project's tab
+  lists its own. New makes a page or a document from a template there.
+- **No folders.** The owner cannot make one. `document_folders` stays in
+  the database with its rows soft deleted, and migration 0035 takes every
+  document out of the folder it was in and keeps it under that folder's
+  client and project, so nothing moves away from the record it was about.
+  The folder tools and channels are gone, and `folder_id` is no longer read
+  or written.
+- **A project's own files are on its Documents tab too**, under its
+  documents as Project files. They keep their own storage (decision 35): a
+  project file is a file on disk in the project's folder or linked where it
+  is, and a document is a record with versions. Moving them into one list
+  would have meant a version history for a linked export, or a project
+  folder for every contract, and neither is wanted. One place per project to
+  look, two kinds of file in it.
+- **Templates is a screen without a rail entry, lit under Projects**, as
+  Styled mail is under Mail. It is reached from the Templates button and New
+  on a Documents tab, and from the palette. Opened from a record, a document
+  made from a template is kept under that record, Done shows it on its tab,
+  and the way back in the title bar goes to the record. The list, the
+  editors, Import Word file and Components are as they were.
+- **A new document asks for a client or a project.** Adding files with no
+  record in view, saving a mail attachment from a conversation filed under
+  nothing, and keeping a document from a template all ask which. The
+  services still accept a document kept under neither, for an agent and for
+  what older installs hold, and those are listed on the Overview as Files
+  without a client, each with a way to pick a place, and See all opens the
+  whole list (`documents.list_unfiled` for an agent).
+- **A preview asked for from another screen** (a timeline, Recent, the
+  palette, the Agent screen, Mail) is drawn over that screen and goes back
+  to it (`DocumentCover.tsx`), as decision 75 described with Documents
+  underneath.
+
+**What would reverse this:** a business that files the same file under
+several clients, or keeps files that belong to no client or project as a
+matter of course. Either wants a place of its own for documents again, and
+it would be a decision about that place, not a revert of this one.
+
+## 82. Document templates are removed, and Files is the seventh place
+
+Amends decisions 19, 41, 62, 65, 75 and 81. The owner used none of the
+document templates and wanted the room they took: a file is something that
+arrives, is written in Word or kept as a page, and the canvas on paper, the
+components and the Word import were a second editor nobody opened. The same
+owner keeps files that are about no client and no job, the terms and
+conditions, a price list, the logo, a checklist, and wanted a place for them
+that is not an exception on the Overview.
+
+- **Document templates are gone, in every layer.** The Templates screen, its
+  editors, Components, Import Word file, using a template, the Templates
+  button and New from a template on a Documents tab, the palette command,
+  the services, the channels and the agent tools (`templates.*`,
+  `templates.components.*`, `templates.import_docx`, `documents.generate`)
+  with their permission rows. A first install is given no example any more.
+  Mail templates and Styled mail are a separate thing and stay as they are.
+- **The rows stay, soft deleted.** Migration 0036 sets `deleted_at` on every
+  document template, its pictures, every component and their pictures, and
+  drops no table: a document made from a template keeps the `template_id` it
+  was made with, the row it names still exists, and nothing reads it. Such a
+  document is an ordinary document: it opens, previews, prints its stored
+  body again and is signed like any other. One that came from a template
+  nobody reviewed stays a specimen and still cannot be signed, because what
+  it says has not changed; the way out is the owner's own checked text as a
+  new document.
+- **Files is the seventh place on the rail**, after Notes, with the
+  documents glyph. It is a client's Documents tab with no client: the same
+  list, tiles, columns, keys and menus (`features/files/FilesScreen.tsx`
+  over `DocumentsPanel` with the place `{ files: true }`), a search in the
+  title bar, and New makes a page and Add files keeps files there, without
+  asking for a place. It replaces the Files without a client card and list
+  on the Overview. Adding files with no record in view, Copy to and Move to
+  all accept Files as an answer. The digits follow the rail, so Files is
+  Ctrl or Cmd 7 and the agent Ctrl or Cmd 8.
+- **The lists behave like a file explorer**, in Files and on every Documents
+  tab. A click selects one, Ctrl a click toggles one, Shift a run, Ctrl A
+  everything, the arrows move and Shift extends, Escape and a click on the
+  empty space let go, and the bar reads "3 of 7 selected". Enter opens,
+  Space previews, Delete deletes with an undo, F2 renames, Ctrl D
+  duplicates, Ctrl C copies, Ctrl X cuts and Ctrl V pastes, while the list
+  or its empty space has the focus. The right-click menu is the platform's
+  (decision 59): Open, Preview, then Copy, Paste, Duplicate and Rename, then
+  Copy to, Move to and what a file can have done to it, then Delete; with
+  several selected only Copy, Duplicate, Copy to, Move to and Delete; and on
+  the empty space Paste, New page and Add files. Duplicate and Copy to copy
+  a page too, with its own copies of its pictures.
+- **Copy and paste go through the system clipboard, read in the main
+  process.** Copying documents puts a copy of each newest file, named by its
+  title, on the Windows clipboard, so they paste into Explorer. A paste
+  takes, in this order: documents copied in Juno while the clipboard still
+  holds what that copy put there (pasted as copies, or moved after a cut);
+  files copied in Explorer, all of them, through the questions Add files
+  asks; a picture, as "Pasted image" and the date and time; text, as
+  "Pasted text" and the date and time. The window only says where to paste
+  and never names a path. Chromium reads only the first file of a copy and
+  cannot write a list, so on Windows the file list is read and written by
+  PowerShell's Get-Clipboard and Set-Clipboard, in a script whose text never
+  changes, with the paths passed as data (as decision 77 hands Word its
+  paths). A smoke run uses a clipboard of its own.
+- **Reading the clipboard is not an agent tool.** It is something a person
+  does at the window, like opening a menu (decision 59), and an agent that
+  could read whatever the owner last copied would see a password manager's
+  output as readily as a file. What a paste makes is made by tools an agent
+  already has, `documents.duplicate` and `documents.copy`, and one new one,
+  `documents.create_file`, which keeps text or base64 bytes as a document,
+  in the same permission row as `documents.import`.
+
+**What would reverse this:** documents that are the same text filled in for
+every client, often enough that writing them by hand costs real time. That
+would be a decision about generating documents again, starting from Word,
+not a return of the canvas on paper.

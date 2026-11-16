@@ -60,6 +60,8 @@ const NAMED: Record<string, string> = {
 	escape: "Esc",
 	enter: "Enter",
 	delete: "Del",
+	space: "Space",
+	backspace: "Backspace",
 };
 
 /** The keys of a shortcut as they are drawn on this machine: ["Ctrl", "K"] or ["⌘", "K"]. */
@@ -81,7 +83,7 @@ export const SCREEN_COMBOS: Partial<Record<ScreenId, string>> = {
 	projects: "mod+4",
 	mail: "mod+5",
 	notes: "mod+6",
-	documents: "mod+7",
+	files: "mod+7",
 	agent: "mod+8",
 };
 
@@ -92,7 +94,6 @@ export const COMBOS = {
 	recent: "mod+e",
 	reminders: "mod+shift+r",
 	newItem: "mod+n",
-	newPage: "mod+shift+n",
 	settings: "mod+,",
 	back: "alt+arrowleft",
 	lock: "mod+shift+l",
@@ -100,6 +101,25 @@ export const COMBOS = {
 	find: "mod+f",
 	openFolder: "mod+o",
 	deleteRecord: "delete",
+	/** What a toast offers to undo, such as a delete. A field keeps its own Ctrl Z. */
+	undo: "mod+z",
+} as const;
+
+/**
+ * The keys of a file list while it has focus: a client's or a project's
+ * Documents tab. They are the list's own, listened for on the list and not on
+ * the window, so a field anywhere else keeps its Ctrl C and Ctrl V.
+ */
+export const LIST_COMBOS = {
+	preview: "space",
+	open: "enter",
+	rename: "f2",
+	remove: "delete",
+	selectAll: "mod+a",
+	duplicate: "mod+d",
+	copy: "mod+c",
+	cut: "mod+x",
+	paste: "mod+v",
 } as const;
 
 export type ShortcutRow = { combos: string[]; label: string };
@@ -119,8 +139,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: [COMBOS.recent], label: "Recent records" },
 			{ combos: [COMBOS.reminders], label: "Reminders" },
 			{ combos: [COMBOS.newItem], label: "New, on this screen" },
-			{ combos: [COMBOS.newPage], label: "New page" },
 			{ combos: [COMBOS.back], label: "Back, out of a record" },
+			{ combos: [COMBOS.undo], label: "Undo, while a message offers it" },
 			{ combos: [COMBOS.settings], label: "Settings" },
 			{ combos: [COMBOS.lock], label: "Lock Juno" },
 			{ combos: [COMBOS.help], label: "This list" },
@@ -135,7 +155,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["mod+4"], label: "Projects" },
 			{ combos: ["mod+5"], label: "Mail" },
 			{ combos: ["mod+6"], label: "Notes" },
-			{ combos: ["mod+7"], label: "Documents" },
+			{ combos: ["mod+7"], label: "Files" },
 			{ combos: ["mod+8"], label: "Agent" },
 		],
 	},
@@ -151,6 +171,34 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 		],
 	},
 	{
+		title: "In the documents list",
+		rows: [
+			{ combos: [LIST_COMBOS.preview], label: "Preview" },
+			{ combos: [LIST_COMBOS.open], label: "Open in its app" },
+			{ combos: [LIST_COMBOS.rename], label: "Rename" },
+			{ combos: [LIST_COMBOS.remove], label: "Delete" },
+			{ combos: [LIST_COMBOS.selectAll], label: "Select all" },
+			{ combos: [LIST_COMBOS.duplicate], label: "Duplicate" },
+			{ combos: [LIST_COMBOS.copy], label: "Copy" },
+			{ combos: [LIST_COMBOS.cut], label: "Cut, to move with the next paste" },
+			{ combos: [LIST_COMBOS.paste], label: "Paste here: documents, or files, a picture or text copied elsewhere" },
+		],
+	},
+	{
+		title: "In a file's preview",
+		rows: [
+			{ combos: ["arrowleft", "arrowright"], label: "Previous and next file" },
+			{ combos: ["escape"], label: "Close the preview" },
+		],
+	},
+	{
+		title: "On a mail attachment",
+		rows: [
+			{ combos: [LIST_COMBOS.preview], label: "Preview" },
+			{ combos: [LIST_COMBOS.open], label: "Open in its app, from a trusted sender" },
+		],
+	},
+	{
 		title: "In the mail list",
 		rows: [
 			{ combos: ["j", "k"], label: "Next and previous conversation" },
@@ -158,7 +206,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["s"], label: "Flag" },
 			{ combos: ["u"], label: "Mark read or unread" },
 			{ combos: ["m"], label: "Move to a folder" },
-			{ combos: ["delete"], label: "Move to trash" },
+			{ combos: ["delete"], label: "Move to trash, or delete a message not sent yet" },
 		],
 	},
 ];

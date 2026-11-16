@@ -22,7 +22,7 @@
  * No Electron import, so every rule here is covered by a test. The picker is in
  * mail-outbox-picker.ts.
  */
-import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { mimeTypeOf } from "../../shared/mime";
@@ -303,7 +303,7 @@ export async function afterSent(
 
 /**
  * Removes copies nothing will send any more: files taken off, and files of a
- * message that was sent, cancelled or deleted. Run at startup, so a crash
+ * message that was sent or deleted. Run at startup, so a crash
  * between sending and tidying up leaves nothing behind for long.
  */
 export function prune(db: Db = getDb()): number {
@@ -317,7 +317,7 @@ export function prune(db: Db = getDb()): number {
 				or(
 					isNotNull(mailOutboxFiles.deletedAt),
 					isNotNull(mailOutbox.deletedAt),
-					inArray(mailOutbox.state, ["sent", "cancelled"]),
+					eq(mailOutbox.state, "sent"),
 				),
 			),
 		)

@@ -216,7 +216,7 @@ export const mailActionTools: ToolDescriptor[] = [
 	{
 		name: "mail.file.set_seen",
 		title: "Mark messages read or unread",
-		description: "Sets or clears the read flag on messages, on the server and here.",
+		description: "Sets or clears the read flag on messages, here at once and on the server as soon as it can be reached.",
 		readOnly: false,
 		requiresConfirmation: true,
 		inputSchema: {

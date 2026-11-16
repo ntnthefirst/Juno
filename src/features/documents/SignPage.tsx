@@ -199,12 +199,12 @@ export function SignPage({ record, onClose, onSigned }: SignPageProps) {
 		return (
 			<FormPage title="Sign document" onBack={onClose} actions={<Button onClick={onClose}>Close</Button>}>
 				<p className="text-base">
-					This document cannot be signed. It was generated from a template nobody has reviewed, so
-					its text is a specimen and signing it would put a signature on wording that was never
+					This document cannot be signed. It was made from a template nobody had reviewed, so its
+					text is a specimen and signing it would put a signature on wording that was never
 					checked.
 				</p>
 				<p className="mt-3 text-sm text-[var(--ink-muted)]">
-					Review the template under Templates, generate the document again, and sign that one.
+					Write the document with your own checked text, add it as a new document, and sign that one.
 				</p>
 			</FormPage>
 		);

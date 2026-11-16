@@ -21,9 +21,9 @@ type WalkthroughStop = {
 	target: string;
 };
 
-// Ordered to match the sidebar, top to bottom. Styled mail and Templates have
-// no entry of their own: they sit behind the switch at the top of Mail and
-// Documents, so those stops point at the switch instead.
+// Ordered to match the sidebar, top to bottom. Styled mail has no entry of
+// its own: it sits behind the switch at the top of Mail, so that stop points
+// at the switch instead.
 const STOPS: WalkthroughStop[] = [
 	{
 		id: "overview",
@@ -63,9 +63,9 @@ const STOPS: WalkthroughStop[] = [
 	{
 		id: "mail-templates",
 		title: "Styled mail",
-		body: "The emails you send to clients again and again, laid out like a page. Switch to them from the top of Mail.",
-		screen: "mail-templates",
-		target: "[data-section-switch]",
+		body: "The emails you send to clients again and again, laid out like a page. Styled mail in the title bar of Mail opens them beside the mailbox.",
+		screen: "mail",
+		target: "[data-styled-mail]",
 	},
 	{
 		id: "notes",
@@ -75,18 +75,11 @@ const STOPS: WalkthroughStop[] = [
 		target: '[data-nav="notes"]',
 	},
 	{
-		id: "documents",
-		title: "Documents",
-		body: "What you have generated or imported for a client, and whether it is signed.",
-		screen: "documents",
-		target: '[data-nav="documents"]',
-	},
-	{
-		id: "document-templates",
-		title: "Templates",
-		body: "The contracts and letters your documents are generated from. Switch to them from the top of Documents.",
-		screen: "document-templates",
-		target: "[data-section-switch]",
+		id: "files",
+		title: "Files",
+		body: "Your own files, kept under no client and no project. Every client and project has a Documents tab that works the same way.",
+		screen: "files",
+		target: '[data-nav="files"]',
 	},
 	{
 		id: "agent",

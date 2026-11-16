@@ -1,4 +1,4 @@
-import type { ProjectAssetKind, ProjectLinkKind } from "@shared/types";
+import type { ProjectLinkKind } from "@shared/types";
 import type { IconName } from "../../components/Icon";
 import { ASSET_ORIGIN } from "@shared/types";
 
@@ -52,15 +52,6 @@ export const LINK_LABELS: Record<ProjectLinkKind, string> = {
 	docs: "Docs",
 	folder: "Folder",
 	other: "Link",
-};
-
-export const ASSET_ICONS: Record<ProjectAssetKind, IconName> = {
-	image: "image",
-	pdf: "documents",
-	video: "play",
-	audio: "play",
-	archive: "archive",
-	file: "documents",
 };
 
 /**

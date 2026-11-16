@@ -10,6 +10,7 @@
  */
 import { and, eq, isNull } from "drizzle-orm";
 import { existsSync } from "node:fs";
+import { extensionOf, mimeTypeOf } from "../../shared/mime";
 import { ownerDisplayName } from "../../shared/owner";
 import type { MailAddress, MailOutboxMessage } from "../../shared/types";
 import { getDb, type Db } from "../db";
@@ -96,6 +97,16 @@ async function resolveAttachment(
 	}
 	if (!path || !existsSync(path)) {
 		throw new Error(`The PDF for "${attachment.filename}" could not be found or rendered.`);
+	}
+	// The newest version can be any file (decision 75). It goes out as what it
+	// is, so a Word version is named and typed as Word, not as a PDF.
+	const extension = extensionOf(path);
+	if (extension && extension !== "pdf") {
+		return {
+			filename: attachment.filename.replace(/\.pdf$/i, "") + `.${extension}`,
+			path,
+			contentType: mimeTypeOf(path),
+		};
 	}
 	return { filename: attachment.filename, path, contentType: "application/pdf" };
 }

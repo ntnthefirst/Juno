@@ -131,6 +131,19 @@ export function OverviewScreen() {
 		changed();
 	}, [reloadSuggestions, changed]);
 
+	// An agent's request answered from the title bar, or a new one arriving,
+	// changes what Coming up lists, so it reads again rather than offering a
+	// Review on a request that is already answered.
+	const reloadRequests = requests.reload;
+	useEffect(
+		() =>
+			window.juno.agent.actions.onChange(() => {
+				reloadRequests();
+				reloadSummary();
+			}),
+		[reloadRequests, reloadSummary],
+	);
+
 	const dismissUndo = useCallback(() => setDeleted(null), []);
 	const dismissNotice = useCallback(() => setNotice(null), []);
 

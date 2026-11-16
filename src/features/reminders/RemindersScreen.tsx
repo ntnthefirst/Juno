@@ -5,11 +5,13 @@ import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { blankMenuFor } from "../../lib/blank-menu";
+import { clearPending, peekPending } from "../../lib/open-entity";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
 import { BUCKET_LABELS, BUCKET_ORDER, todayIso } from "./format";
 import { ReminderForm } from "./ReminderForm";
 import { ReminderRow } from "./ReminderRow";
 import { SnoozeDialog } from "./SnoozeDialog";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Load =
 	| { status: "loading" }
@@ -35,6 +37,34 @@ export function RemindersScreen() {
 			cancelled = true;
 		};
 	}, []);
+
+	// A reminder pressed somewhere else (the bell, a client's timeline, an agent's
+	// request) arrives as a request, read once as this screen mounts, and opens
+	// in its form with the list behind it to come back to.
+	const [requested] = useState(() => peekPending("reminder")?.id ?? null);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
+	useEffect(() => {
+		if (!requested) return;
+		let cancelled = false;
+		window.juno.reminders
+			.get(requested)
+			.then((reminder) => {
+				if (cancelled) return;
+				if (reminder) setForm({ reminder });
+				else setNotice("That reminder is no longer here.");
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setNotice(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [requested]);
 
 	const fetchRows = useCallback(
 		() => window.juno.reminders.list({ includeDone }),
@@ -110,7 +140,7 @@ export function RemindersScreen() {
 				</TitleBarSlot>
 
 				{load.status === "loading" ? (
-					<p className="text-[var(--ink-muted)]">Loading.</p>
+					<RowsSkeleton rows={6} label="Loading your reminders" />
 				) : load.status === "error" ? (
 					<div className="border-l-2 border-[var(--risk)] pl-4">
 						<p className="font-[var(--weight-medium)] text-[var(--risk)]">

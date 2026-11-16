@@ -74,32 +74,30 @@ import type {
 	CalendarRangeQuery,
 	DocumentRecord,
 	DocumentSignature,
-	DocumentCanvasPdf,
-	DocumentCanvasRender,
-	DocumentTemplate,
-	DocumentTemplateAsset,
-	ComponentUse,
-	DetachInput,
-	DetachResult,
-	DocumentComponent,
-	DocumentComponentAsset,
-	DocumentComponentAssetInput,
-	DocumentComponentInput,
-	DocumentComponentPatch,
-	DocumentComponentRender,
-	DocumentTemplateAssetInput,
-	DocumentTemplateInput,
-	DocumentTemplatePatch,
 	DocumentTimelineEntry,
 	VersionUse,
-	GenerateDocumentInput,
-	GenerateDocumentResult,
+	CompareTextInput,
+	TextComparison,
 	AddVersionInput,
 	DocumentVersion,
 	ImportAnalysis,
 	ImportFileInput,
-	ImportSource,
 	PickedPdf,
+	PickedFile,
+	ClipboardCopyResult,
+	PasteResult,
+	DocumentPlace,
+	AnalyseImportInput,
+	ImportFromMailInput,
+	ImportFromMailResult,
+	SaveThreadAttachmentsInput,
+	SaveThreadAttachmentsResult,
+	ThreadAttachments,
+	DocumentMoveInput,
+	ConvertPdfResult,
+	FilePreview,
+	FilePreviewSource,
+	DocumentsChanged,
 	IsoDate,
 	AccountingTool,
 	Reminder,
@@ -225,6 +223,7 @@ import type {
 	OnboardingPatch,
 	OnboardingState,
 	SettingsSection,
+	SettingsTarget,
 	ChildClosedInfo,
 	ClientIntakeInput,
 	NewRecordKind,
@@ -279,8 +278,12 @@ export interface JunoApi {
 	 * There is no method to open a second main window: there is only ever one.
 	 */
 	window: {
-		/** A section opens that tab, which is how a screen sends you where it needs you. */
-		openSettings(section?: SettingsSection): Promise<void>;
+		/**
+		 * A section opens that tab, which is how a screen sends you where it needs
+		 * you. A target goes one step further on that tab: the Add calendar page, or
+		 * a new rule on one account's page.
+		 */
+		openSettings(section?: SettingsSection, target?: SettingsTarget): Promise<void>;
 		closeSettings(): Promise<void>;
 		isSettingsOpen(): Promise<boolean>;
 		/**
@@ -288,7 +291,7 @@ export interface JunoApi {
 		 * for a different tab. The tab cannot ride in the URL at that point, and
 		 * reloading would throw away whatever was half-typed.
 		 */
-		onShowSection(listener: (section: SettingsSection) => void): () => void;
+		onShowSection(listener: (section: SettingsSection, target: SettingsTarget | null) => void): () => void;
 		/**
 		 * Fires in the main window when either modal child closes. Neither child
 		 * has a channel back, so this is how a setting changed in one of them, and
@@ -523,7 +526,6 @@ export interface JunoApi {
 			restore(id: string): Promise<ProjectAsset>;
 			reorder(projectId: string, orderedIds: string[]): Promise<ProjectAsset[]>;
 			open(id: string): Promise<void>;
-			reveal(id: string): Promise<void>;
 		};
 
 		/**
@@ -807,83 +809,71 @@ export interface JunoApi {
 		month(month: string): Promise<Briefing>;
 	};
 
-	templates: {
-		list(): Promise<DocumentTemplate[]>;
-		get(id: string): Promise<DocumentTemplate | null>;
-		create(input: DocumentTemplateInput): Promise<DocumentTemplate>;
-		update(id: string, patch: DocumentTemplatePatch): Promise<DocumentTemplate>;
-		/**
-		 * Marks the text as checked. Separate from update on purpose: reviewing is
-		 * a claim about the content and must never be a side effect of an edit.
-		 */
-		setReviewed(id: string, reviewed: boolean): Promise<DocumentTemplate>;
-		remove(id: string): Promise<DocumentTemplate>;
-		/** Renders against a client without storing anything, for the editor. */
-		preview(input: {
-			bodyHtml: string;
-			clientId?: string | null;
-			projectId?: string | null;
-			isSpecimen: boolean;
-		}): Promise<{ html: string; missing: string[] }>;
-		/**
-		 * A canvas template, or a draft of one, filled in with values typed by
-		 * hand and printed. Stores nothing.
-		 */
-		renderPdf(input: DocumentCanvasRender): Promise<DocumentCanvasPdf>;
-		/** Saves that PDF where the person chooses, for no client. The path, or null when cancelled. */
-		savePdf(input: DocumentCanvasRender): Promise<string | null>;
-		/** Asks for a .docx and makes a template of it. Null when cancelled. */
-		pickDocx(): Promise<DocumentTemplate | null>;
-		/** Makes a template of a .docx dropped on the window. */
-		importDocx(input: { fileName: string; data: Uint8Array }): Promise<DocumentTemplate>;
-		assets: {
-			list(templateId: string): Promise<DocumentTemplateAsset[]>;
-			/** Stores a picture for the template. The same bytes twice give the same picture. */
-			add(input: DocumentTemplateAssetInput): Promise<DocumentTemplateAsset>;
-			remove(id: string): Promise<DocumentTemplateAsset>;
-		};
-		/**
-		 * Pieces of a page made once and placed in many templates (decision 65).
-		 * Deleting one that a template still places is refused with the names.
-		 */
-		components: {
-			list(): Promise<DocumentComponent[]>;
-			get(id: string): Promise<DocumentComponent | null>;
-			create(input: DocumentComponentInput): Promise<DocumentComponent>;
-			update(id: string, patch: DocumentComponentPatch): Promise<DocumentComponent>;
-			remove(id: string): Promise<DocumentComponent>;
-			/** The templates that place it, directly or through another component. */
-			usedBy(id: string): Promise<ComponentUse[]>;
-			/** Copies a placed component into a draft of a template and drops the link. Stores nothing. */
-			detach(input: DetachInput): Promise<DetachResult>;
-			/** The component alone on a page, printed. Stores nothing. */
-			renderPdf(input: DocumentComponentRender): Promise<DocumentCanvasPdf>;
-			assets: {
-				list(componentId: string): Promise<DocumentComponentAsset[]>;
-				add(input: DocumentComponentAssetInput): Promise<DocumentComponentAsset>;
-				remove(id: string): Promise<DocumentComponentAsset>;
-			};
-		};
-	};
-
 	documents: {
 		list(query?: { clientId?: string; projectId?: string }): Promise<DocumentRecord[]>;
 		/** Keeps it under a client, a project, both or neither. A project brings its client. */
 		link(id: string, input: { clientId: string | null; projectId: string | null }): Promise<DocumentRecord>;
 		get(id: string): Promise<DocumentRecord | null>;
-		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
 		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */
 		pickPdfs(): Promise<PickedPdf[]>;
-		/** Which existing documents an incoming file looks like, before anything is written. */
-		analyseImport(input: { source: ImportSource; clientId?: string | null }): Promise<ImportAnalysis>;
-		/** A new document from the file. Refuses a title the client already has. */
+		/** Opens the file picker for any kind of file and hands the chosen files back as bytes. Empty when cancelled. */
+		pickFiles(): Promise<PickedFile[]>;
+		/**
+		 * Which existing documents an incoming file looks like, each with its reason
+		 * (the same bytes, the same words, the same name in the place it is going
+		 * to), before anything is written.
+		 */
+		analyseImport(input: AnalyseImportInput): Promise<ImportAnalysis>;
+		/** What an incoming file says differently from a kept version, word by word. */
+		compareText(input: CompareTextInput): Promise<TextComparison>;
+		/** A new document from the file, under a client or a project. Refuses a title the place already has. */
 		importFile(input: ImportFileInput): Promise<DocumentRecord>;
 		/** Adds the file to a document as a version, placed by the file's own date. */
 		addVersion(input: AddVersionInput): Promise<DocumentVersion>;
+		/** A mail attachment kept as a document, or with `versionOf` as the next version of one. */
+		importFromMail(input: ImportFromMailInput): Promise<ImportFromMailResult>;
+		/** Every attachment of a conversation with the document it already is, and where a one-step save puts the rest. */
+		threadAttachments(threadId: string): Promise<ThreadAttachments>;
+		/** Saves a conversation's attachments to its project or client, or the place given, each checked like a drop. */
+		saveThreadAttachments(input: SaveThreadAttachmentsInput): Promise<SaveThreadAttachmentsResult>;
+		/** The documents kept under no client and no project, newest first, for the Overview to give a place. */
+		listUnfiled(): Promise<DocumentRecord[]>;
+		/** Under another client or project. A project with a client brings its client. */
+		move(id: string, input: DocumentMoveInput): Promise<DocumentRecord>;
+		/** Changes the title only. */
+		rename(id: string, title: string): Promise<DocumentRecord>;
+		/** A new document from the newest version, in the same place, named "<title> (copy)". A page is copied with its pictures. */
+		duplicate(id: string): Promise<DocumentRecord>;
+		/**
+		 * Ctrl C, Ctrl X and Ctrl V on a Documents tab and in Files. The main
+		 * process reads the system clipboard; the window only says where to paste.
+		 */
+		clipboard: {
+			copy(ids: string[], mode: "copy" | "cut"): Promise<ClipboardCopyResult>;
+			paste(place: DocumentPlace): Promise<PasteResult>;
+		};
+		/** A new document from the newest version, under another client or project. */
+		copyTo(id: string, target: DocumentMoveInput): Promise<DocumentRecord>;
+		/** Keeps a PDF of the newest version as the next version. `via: "juno"` means the layout may differ. */
+		convertPdf(id: string): Promise<ConvertPdfResult>;
+		/** What to draw for a file. Never a path; pictures and Word files come as `app://preview/` addresses. */
+		preview(source: FilePreviewSource): Promise<FilePreview>;
+		/**
+		 * Opens the newest version in the operating system's app for it: a working
+		 * copy whose saved edits come back as versions, or read only when it is signed.
+		 */
+		open(id: string): Promise<{ readOnly: boolean }>;
+		/**
+		 * Starts the platform's drag of these documents' newest files, for a row
+		 * dragged out of Juno. Hands back the names the dragged copies carry.
+		 */
+		startDrag(ids: string[]): Promise<string[]>;
+		/** Fires when documents changed without this window asking, such as an edit saved in another app. */
+		onChanged(listener: (change: DocumentsChanged) => void): () => void;
 		/** Newest first. */
 		versions(documentId: string): Promise<DocumentVersion[]>;
-		openVersion(versionId: string): Promise<void>;
-		revealVersion(versionId: string): Promise<void>;
+		/** Opens one version in its app. Anything but the newest opens read only. */
+		openVersion(versionId: string): Promise<{ readOnly: boolean }>;
 		/** Opens the signing details of a stamped or signed version. */
 		openCertificate(versionId: string): Promise<void>;
 		/** The document's PDF, for the placement page. Never a path. */
@@ -911,8 +901,7 @@ export interface JunoApi {
 		sign(input: SignDocumentInput): Promise<DocumentSignature>;
 		signatures(documentId: string): Promise<DocumentSignature[]>;
 		/** Opens the PDF in whatever the OS uses for one. */
-		openPdf(id: string): Promise<void>;
-		revealPdf(id: string): Promise<void>;
+		openPdf(id: string): Promise<{ readOnly: boolean }>;
 	};
 
 	signingCertificate: {
@@ -931,8 +920,12 @@ export interface JunoApi {
 		get(id: string): Promise<Reminder | null>;
 		create(input: ReminderInput): Promise<Reminder>;
 		update(id: string, patch: ReminderPatch): Promise<Reminder>;
-		/** A one-off finishes. A recurring one rolls forward to its next occurrence. */
-		complete(id: string, note?: string | null): Promise<Reminder>;
+		/**
+		 * A one-off finishes. A recurring one rolls forward to its next occurrence.
+		 * `dueOn` is the occurrence the caller showed: when the reminder has moved
+		 * past it, or is already done, nothing changes.
+		 */
+		complete(id: string, note?: string | null, dueOn?: IsoDate): Promise<Reminder>;
 		snooze(id: string, until: IsoDate): Promise<Reminder>;
 		reopen(id: string): Promise<Reminder>;
 		remove(id: string): Promise<Reminder>;
@@ -1097,6 +1090,8 @@ export interface JunoApi {
 			unlinkClient(id: string): Promise<MailThreadSummary>;
 			/** Files the conversation under a project, or takes it off one with null. Leaves its client alone. */
 			linkProject(id: string, projectId: string | null): Promise<MailThreadSummary>;
+			/** How many rows Drafts lists: the server's drafts and every message not sent yet. */
+			countDrafts(accountId?: string): Promise<number>;
 			countForClient(clientId: string): Promise<number>;
 		};
 		/**
@@ -1131,8 +1126,6 @@ export interface JunoApi {
 			body(id: string): Promise<MailMessageBody | null>;
 		};
 		attachments: {
-			/** Shows the file in the file manager. */
-			reveal(id: string): Promise<void>;
 			/** Opens it in the default app. Only plain document, image and media types. */
 			open(id: string): Promise<void>;
 			/** Copies it wherever the person chooses. Null when they cancel. */
@@ -1224,7 +1217,8 @@ export interface JunoApi {
 			replySeedOutgoing(outboxId: string, mode: MailReplyMode): Promise<MailReplySeed>;
 			/** The person's press. Queues the message; the sender picks it up at once. */
 			send(id: string): Promise<MailOutboxMessage>;
-			cancel(id: string): Promise<MailOutboxMessage>;
+			/** Takes a message that has not gone out back to a draft, so it can be edited. */
+			returnToDraft(id: string): Promise<MailOutboxMessage>;
 			retry(id: string): Promise<MailOutboxMessage>;
 			remove(id: string): Promise<MailOutboxMessage>;
 			/**

@@ -1,22 +1,11 @@
 /**
- * Turns records into the values a template refers to.
+ * How dates and amounts read in what Juno writes for a client.
  *
- * Pure, so the formatting that ends up in a contract is tested rather than
+ * Pure, so the formatting that ends up in a letter is tested rather than
  * assumed. Belgian conventions throughout, because everything client-facing is
  * Dutch (Belgium): dates as 14/11/2026 and money as 2 100,00 with a non-breaking
  * thousands space.
  */
-import { ownerContact } from "../../shared/owner";
-import type {
-	Client,
-	ClientAddress,
-	ClientEmail,
-	ClientPhone,
-	Contact,
-	OwnerProfile,
-	Project,
-} from "../../shared/types";
-
 export const NBSP = " ";
 
 /** `YYYY-MM-DD` to `DD/MM/YYYY`, without going through Date and back. */
@@ -69,72 +58,4 @@ export function todayIsoDate(now = new Date()): string {
 	const month = String(now.getMonth() + 1).padStart(2, "0");
 	const day = String(now.getDate()).padStart(2, "0");
 	return `${year}-${month}-${day}`;
-}
-
-export interface ContextSources {
-	owner: OwnerProfile;
-	client: Client;
-	/** The client's primary email, phone and address, resolved by the caller. */
-	primaryEmail?: ClientEmail | null;
-	primaryPhone?: ClientPhone | null;
-	primaryAddress?: ClientAddress | null;
-	primaryContact?: Contact | null;
-	project?: Project | null;
-	/** Values the operator typed for this document, such as an addendum summary. */
-	extras?: Record<string, string>;
-	issuedOn?: string;
-	title?: string;
-}
-
-/**
- * The owner as a template sees it: the scalar fields, plus one name, one
- * address and one number worked out from the profile's two lists. The lists
- * themselves are dropped, because a template asks for an address and
- * `{{ owner.emails }}` would print an object.
- */
-function ownerFields(owner: OwnerProfile): Record<string, unknown> {
-	const fields: Record<string, unknown> = { ...owner, ...ownerContact(owner) };
-	delete fields.emails;
-	delete fields.phones;
-	return fields;
-}
-
-export function buildContext(sources: ContextSources): Record<string, unknown> {
-	const issuedOn = sources.issuedOn ?? todayIsoDate();
-
-	return {
-		owner: ownerFields(sources.owner),
-		client: {
-			name: sources.client.name,
-			email: sources.primaryEmail?.email ?? "",
-			phone: sources.primaryPhone?.phone ?? "",
-			website: sources.client.website ?? "",
-			vatNumber: sources.client.vatNumber ?? "",
-			language: sources.client.language,
-			addressLine1: sources.primaryAddress?.addressLine1 ?? "",
-			addressLine2: sources.primaryAddress?.addressLine2 ?? "",
-			postalCode: sources.primaryAddress?.postalCode ?? "",
-			city: sources.primaryAddress?.city ?? "",
-			country: sources.primaryAddress?.country ?? "",
-			contactName: sources.primaryContact?.name ?? "",
-			contactRole: sources.primaryContact?.role ?? "",
-			contactEmail: sources.primaryContact?.email ?? "",
-		},
-		project: sources.project
-			? {
-					name: sources.project.name,
-					description: sources.project.description ?? "",
-					startsOn: formatDate(sources.project.startsOn),
-					dueOn: formatDate(sources.project.dueOn),
-					agreedValue: formatEuros(sources.project.agreedValueCents),
-					agreedValueCents: sources.project.agreedValueCents ?? "",
-				}
-			: {},
-		document: {
-			title: sources.title ?? "",
-			issuedOn: formatDate(issuedOn),
-			issuedOnIso: issuedOn,
-			...(sources.extras ?? {}),
-		},
-	};
 }

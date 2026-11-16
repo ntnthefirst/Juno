@@ -6,41 +6,33 @@
  * Node. This module is the seam where the database meets the printer.
  */
 import { BrowserWindow, dialog, shell } from "electron";
-import { copyFileSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, readFileSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { eq } from "drizzle-orm";
-import { expandCanvas } from "../../shared/components";
 import type {
-	DocumentCanvas,
-	DocumentCanvasPdf,
-	DocumentCanvasRender,
-	DocumentComponentRender,
 	DocumentSignature,
+	PickedFile,
 	PickedPdf,
 	SignDocumentInput,
 	StampPlacement,
-	TemplateInput,
 	VersionUse,
 } from "../../shared/types";
 import { STAMP_MAX_WIDTH, STAMP_MIN_WIDTH } from "../../shared/stamp";
 import { getDb, type Db } from "../db";
 import { documentSignatures } from "../db/schema";
-import * as components from "./document-components";
-import { lookupFor } from "./document-component-lookup";
 import * as pdf from "./document-pdf";
 import { MAX_IMPORT_BYTES } from "./document-import";
 import * as versions from "./document-versions";
+import * as working from "./document-working";
+import { mediaTypeFor, safeExtensionOf } from "./file-kind";
+import { extensionOf } from "../../shared/mime";
 import { extractText } from "./pdf-text";
 import { signPdf } from "./pdf-sign";
 import * as certificate from "./signing-certificate";
 import { documentShell } from "./document-style";
-import { loadGoogleFont } from "./mail-fonts";
-import * as templates from "./document-templates";
 import * as documents from "./documents";
-import { importDocx, MAX_DOCX_BYTES } from "./document-docx";
 import { fileNameFor } from "./documents";
 import * as signature from "./signature";
-import { render } from "./template-render";
 
 export async function previewHtml(id: string, db: Db = getDb()): Promise<string> {
 	const record = await documents.get(id, db);
@@ -52,6 +44,29 @@ export async function previewHtml(id: string, db: Db = getDb()): Promise<string>
 		title: record.title,
 		bodyHtml: record.bodyHtml,
 		isSpecimen: record.isSpecimen,
+	});
+}
+
+/**
+ * Asks for any files (decision 75) and hands their bytes back, for the window
+ * to add through the same questions a drop asks. Empty when cancelled.
+ */
+export async function pickFiles(): Promise<PickedFile[]> {
+	const parent = BrowserWindow.getFocusedWindow();
+	const options = { title: "Add files", properties: ["openFile" as const, "multiSelections" as const] };
+	const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+	if (result.canceled) return [];
+	return result.filePaths.map((path) => {
+		const stat = statSync(path);
+		if (stat.size > MAX_IMPORT_BYTES) {
+			throw new Error(`"${basename(path)}" is larger than 100 MB. Keep it in a project's files instead, which can link to it.`);
+		}
+		return {
+			fileName: basename(path),
+			data: new Uint8Array(readFileSync(path)),
+			fileDate: stat.mtime.toISOString(),
+			mediaType: mediaTypeFor(basename(path)),
+		};
 	});
 }
 
@@ -73,177 +88,10 @@ export async function pickPdfs(): Promise<PickedPdf[]> {
 	return result.filePaths.map((path) => {
 		const stat = statSync(path);
 		if (stat.size > MAX_IMPORT_BYTES) {
-			throw new Error(`"${basename(path)}" is larger than 50 MB. Split it or compress it first.`);
+			throw new Error(`"${basename(path)}" is larger than 100 MB. Split it or compress it first.`);
 		}
 		return { fileName: basename(path), data: new Uint8Array(readFileSync(path)), fileDate: stat.mtime.toISOString() };
 	});
-}
-
-/**
- * Renders a body against real records without storing anything, for the editor.
- *
- * Uses a real client when one is given, so the preview shows the gaps that will
- * actually appear rather than a tidy fiction.
- */
-export async function previewTemplate(
-	input: {
-		bodyHtml: string;
-		clientId?: string | null;
-		projectId?: string | null;
-		isSpecimen: boolean;
-	},
-	db: Db = getDb(),
-): Promise<{ html: string; missing: string[] }> {
-	const context = await documents.previewContext(
-		{ clientId: input.clientId ?? null, projectId: input.projectId ?? null },
-		db,
-	);
-	const rendered = render(input.bodyHtml, context);
-	return {
-		html: documentShell({
-			title: "Voorbeeld",
-			bodyHtml: rendered.html,
-			isSpecimen: input.isSpecimen,
-		}),
-		missing: rendered.missing,
-	};
-}
-
-/**
- * Generates a document and writes its PDF in one step.
- *
- * A document is a PDF (docs/editors.md section 5), so a record whose file does
- * not exist yet is a half-made thing that every screen then has to describe:
- * "generated, no PDF" is a state nobody asked for. Both adapters call this
- * rather than generating and rendering in sequence themselves, because a
- * two-step operation sequenced in an adapter is a step the other adapter
- * forgets.
- *
- * The PDF failing does not lose the document. The record is already written and
- * is returned with `pdfPath` still null, so the person can try again from the
- * detail view rather than losing what they filled in.
- */
-export async function generate(
-	input: documents.GenerateInput,
-	db: Db = getDb(),
-): Promise<documents.GenerateResult & { pdfError: string | null }> {
-	const template = await templates.get(input.templateId, db);
-	const fontCss = template?.canvas ? await canvasFontCss(template.canvas, template.inputs, db) : "";
-	const result = await documents.generate(input, db, { fontCss });
-
-	try {
-		const withPdf = await renderPdf(result.document.id, db);
-		return { document: withPdf, missing: result.missing, pdfError: null };
-	} catch (cause) {
-		return {
-			document: result.document,
-			missing: result.missing,
-			pdfError: cause instanceof Error ? cause.message : "The PDF could not be written.",
-		};
-	}
-}
-
-/**
- * The Google fonts a canvas uses, with their files inline, so the PDF carries
- * its own type and prints the same with no connection. A font that cannot be
- * fetched is left out and the text prints in its fallback, which is what the
- * canvas already shows for it; a font from anywhere else is never fetched
- * (mail-fonts.ts says why).
- */
-async function canvasFontCss(canvas: DocumentCanvas, inputs: TemplateInput[], db: Db): Promise<string> {
-	const rules: string[] = [];
-	// A placed component brings the fonts it uses, so the PDF carries them too.
-	const fonts = expandCanvas(canvas, inputs, lookupFor(db)).canvas.layout.fonts;
-	for (const font of fonts) {
-		if (font.source !== "google") continue;
-		try {
-			const loaded = await loadGoogleFont({ family: font.family, weights: font.weights, italic: font.italic });
-			rules.push(loaded.css);
-		} catch {
-			// Printed in the fallback, as above.
-		}
-	}
-	return rules.join("\n");
-}
-
-/**
- * A canvas template filled in and printed, without storing anything: the PDF
- * the person is shown before deciding who it is for, and what the editor
- * previews. Generating it again for a client gives the same pages, because a
- * canvas template takes nothing from the client (docs/templates.md).
- */
-export async function renderCanvasPdf(input: DocumentCanvasRender, db: Db = getDb()): Promise<DocumentCanvasPdf> {
-	const template = await templates.get(input.templateId, db);
-	if (!template) throw new Error("That template no longer exists.");
-	const canvas = input.canvas ?? template.canvas;
-	if (!canvas) throw new Error("This template is not laid out on paper. Open it in the editor to print it.");
-	const inputs = input.inputs ?? template.inputs;
-	const rendered = templates.renderCanvas(
-		{ templateId: template.id, canvas, inputs, values: input.values ?? {}, fontCss: await canvasFontCss(canvas, inputs, db) },
-		db,
-	);
-	const bytes = await pdf.printPdf({
-		title: template.name,
-		bodyHtml: rendered.html,
-		isSpecimen: template.reviewedAt === null,
-		language: template.language,
-	});
-	return { pdf: new Uint8Array(bytes), missing: rendered.missing };
-}
-
-/**
- * A component printed on its own page with its inputs at the values given, for
- * the editor's preview. Nothing is stored and no banner is added: it is a piece
- * of a document and says nothing about review.
- */
-export async function renderComponentPdf(input: DocumentComponentRender, db: Db = getDb()): Promise<DocumentCanvasPdf> {
-	const component = await components.get(input.componentId, db);
-	if (!component) throw new Error("That component no longer exists.");
-	const canvas = input.canvas ?? components.componentCanvas(component.root, component.fonts);
-	const inputs = input.inputs ?? component.inputs;
-	const fontCss = await canvasFontCss(canvas, inputs, db);
-	const rendered = components.renderAlone({ ...input, canvas, inputs, fontCss }, db);
-	const bytes = await pdf.printPdf({ title: component.name, bodyHtml: rendered.html, isSpecimen: false, language: "nl-BE" });
-	return { pdf: new Uint8Array(bytes), missing: rendered.missing };
-}
-
-/**
- * Saves that same PDF where the person chooses, for a document that belongs to
- * no client. Null when the dialog is cancelled. Nothing is recorded: a file
- * saved this way is the person's, not a document Juno keeps.
- */
-export async function saveCanvasPdf(input: DocumentCanvasRender, db: Db = getDb()): Promise<string | null> {
-	const template = await templates.get(input.templateId, db);
-	if (!template) throw new Error("That template no longer exists.");
-	const { pdf: bytes } = await renderCanvasPdf({ templateId: input.templateId, values: input.values }, db);
-	// Only the stored template is saved: a draft in the editor is previewed, not filed.
-	const base = template.name.replace(/[\\/:*?"<>|]/g, "").trim() || "document";
-	const parent = BrowserWindow.getFocusedWindow();
-	const options = { title: "Save the PDF", defaultPath: `${base}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] };
-	const result = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
-	if (result.canceled || !result.filePath) return null;
-	writeFileSync(result.filePath, bytes);
-	return result.filePath;
-}
-
-/**
- * Asks for a Word file and makes a template of it. Null when the picker is
- * cancelled, which is not an error.
- */
-export async function pickDocx(db: Db = getDb()): Promise<templates.DocumentTemplate | null> {
-	const parent = BrowserWindow.getFocusedWindow();
-	const options = {
-		title: "Import a Word document",
-		properties: ["openFile" as const],
-		filters: [{ name: "Word document", extensions: ["docx"] }],
-	};
-	const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
-	const path = result.canceled ? undefined : result.filePaths[0];
-	if (!path) return null;
-	if (statSync(path).size > MAX_DOCX_BYTES) {
-		throw new Error(`"${basename(path)}" is larger than 30 MB. Make it smaller first.`);
-	}
-	return importDocx({ fileName: basename(path), data: new Uint8Array(readFileSync(path)) }, db);
 }
 
 export async function renderPdf(id: string, db: Db = getDb()) {
@@ -269,6 +117,10 @@ export async function renderPdf(id: string, db: Db = getDb()) {
 			kind: "generated",
 			source: "generate",
 			pdfPath: path,
+			// The name and size a Documents tab lists, as every other version records them.
+			fileName: `${record.title.trim() || "Document"}.pdf`,
+			mediaType: "application/pdf",
+			byteSize: bytes.length,
 			fileDate: new Date().toISOString(),
 			fileHash: versions.hashBytes(bytes),
 			textContent: await extractText(bytes),
@@ -364,7 +216,6 @@ export async function sign(
 	const withPdf = record.pdfPath ? record : await renderPdf(record.id, db);
 	if (!withPdf.pdfPath) throw new Error("The document has no PDF to sign.");
 
-	const template = record.templateId ? await templates.get(record.templateId, db) : null;
 	const imagePath = input.useSignatureImage === false ? null : await signature.getPath();
 	const signedAt = new Date().toISOString();
 
@@ -402,7 +253,7 @@ export async function sign(
 		signerRole: input.signerRole ?? null,
 		signedAt,
 		documentTitle: record.title,
-		templateName: template?.name ?? "onbekend",
+		templateName: null,
 		templateVersion: record.templateVersion,
 		isSpecimen: record.isSpecimen,
 	});
@@ -430,6 +281,9 @@ export async function sign(
 			kind: digital ? "signed" : "stamped",
 			source: "sign",
 			pdfPath: outputPath,
+			fileName: `${record.title.trim() || "Document"}.pdf`,
+			mediaType: "application/pdf",
+			byteSize: signed.length,
 			fileDate: signedAt,
 			fileHash: versions.hashBytes(signed),
 			textContent: await extractText(signed),
@@ -449,22 +303,18 @@ export async function readPdf(id: string, db: Db = getDb()): Promise<Uint8Array>
 	return documents.readPdfBytes(id, db);
 }
 
-/** Opens the newest version, which is what opening a document means. */
-export async function openPdf(id: string, db: Db = getDb()): Promise<void> {
-	await openPath(await latestPdfPath(id, db));
+/**
+ * Opens the newest version, which is what opening a document means, in the
+ * operating system's app for it: a working copy Juno watches for edits, or a
+ * read-only copy of a signed one (document-working.ts).
+ */
+export async function openPdf(id: string, db: Db = getDb()): Promise<{ readOnly: boolean }> {
+	return working.openDocument(id, db);
 }
 
-export async function revealPdf(id: string, db: Db = getDb()): Promise<void> {
-	shell.showItemInFolder(await latestPdfPath(id, db));
-}
-
-/** One version in particular, from the version list. Resolved from its id. */
-export async function openVersion(versionId: string, db: Db = getDb()): Promise<void> {
-	await openPath(versions.pathOf(versionId, db));
-}
-
-export async function revealVersion(versionId: string, db: Db = getDb()): Promise<void> {
-	shell.showItemInFolder(versions.pathOf(versionId, db));
+/** One version in particular, from the version list. Anything but the newest opens read only. */
+export async function openVersion(versionId: string, db: Db = getDb()): Promise<{ readOnly: boolean }> {
+	return working.openVersion(versionId, db);
 }
 
 /** The bytes of one version, for the viewer. Resolved from its id, never from a path. */
@@ -481,14 +331,17 @@ export async function downloadVersion(versionId: string, db: Db = getDb()): Prom
 	const { version } = versions.get(versionId, db);
 	const record = await documents.get(version.documentId, db);
 	if (!record) throw new Error("That document no longer exists.");
-	const source = versions.pathOf(versionId, db);
+	const file = versions.fileOf(versionId, db);
+	const source = file.path;
+	// The file keeps its own kind: a Word version downloads as Word.
+	const extension = safeExtensionOf(extensionOf(file.fileName || file.path)) || "pdf";
 
 	const base = record.title.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]/g, "").trim() || "document";
 	const parent = BrowserWindow.getFocusedWindow();
 	const options = {
 		title: "Download a copy",
-		defaultPath: `${base}${version.isLatest ? "" : `-v${version.number}`}.pdf`,
-		filters: [{ name: "PDF", extensions: ["pdf"] }],
+		defaultPath: `${base}${version.isLatest ? "" : `-v${version.number}`}.${extension}`,
+		filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
 	};
 	const result = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
 	if (result.canceled || !result.filePath) return null;
@@ -573,10 +426,4 @@ export async function openCertificate(versionId: string, db: Db = getDb()): Prom
 async function openPath(path: string): Promise<void> {
 	const error = await shell.openPath(path);
 	if (error) throw new Error(error);
-}
-
-async function latestPdfPath(id: string, db: Db): Promise<string> {
-	const record = await documents.get(id, db);
-	if (!record?.pdfPath) throw new Error("This document has no PDF yet. Create one first.");
-	return record.pdfPath;
 }

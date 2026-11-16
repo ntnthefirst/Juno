@@ -44,11 +44,10 @@ function action(toolName: string, args: Record<string, unknown>): AgentAction {
 
 describe("what a bare id means", () => {
 	it("follows the tool it is passed to, and stays silent for a row inside a client", () => {
-		expect(kindOfId("mail.outbox.cancel")).toBe("mailDraft");
+		expect(kindOfId("mail.outbox.update")).toBe("mailDraft");
 		expect(kindOfId("mail.send")).toBe("mailDraft");
 		expect(kindOfId("clients.update")).toBe("client");
 		expect(kindOfId("reminders.snooze")).toBe("reminder");
-		expect(kindOfId("templates.update")).toBe("documentTemplate");
 		expect(kindOfId("mail.templates.update")).toBe("mailTemplate");
 		// An id passed to clients.emails.update is an email row, not a client.
 		expect(kindOfId("clients.emails.update")).toBeNull();

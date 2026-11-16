@@ -88,7 +88,7 @@ describe("what a toast says", () => {
 		const toast = reminderToast(await reminders.list({ actionableOnly: true }), false)!;
 		expect(toast.body).toBe("Send the quote to Peeters");
 		expect(toast.buttons.map((b) => b.action)).toEqual([
-			{ kind: "reminder.complete", reminderId: only.id },
+			{ kind: "reminder.complete", reminderId: only.id, dueOn: only.dueOn },
 			{ kind: "reminder.snooze", reminderId: only.id },
 		]);
 	});

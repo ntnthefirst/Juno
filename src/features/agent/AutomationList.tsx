@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import type { Automation, AutomationRun } from "@shared/types";
 import { AddButton } from "../../components/AddButton";
 import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
 import { ContextMenu, MenuButton, type MenuItem } from "../../components/Menu";
 import { messageOf } from "../../lib/errors";
 import { useContextMenu } from "../../lib/use-context-menu";
 import { AutomationForm } from "./AutomationForm";
 import { describeTrigger, formatWhen, RUN_LABELS, RUN_TONES } from "./format";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type AutomationListProps = {
 	onNotice: (message: string) => void;
@@ -71,7 +73,7 @@ export function AutomationList({ onNotice, onChanged }: AutomationListProps) {
 			</div>
 		);
 	}
-	if (load.status === "loading") return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (load.status === "loading") return <RowsSkeleton rows={3} />;
 
 	if (form) {
 		return (
@@ -186,6 +188,8 @@ type AutomationRowProps = {
  */
 function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) {
 	const menu = useContextMenu();
+	// There is no restore for an automation, so deleting one asks first.
+	const [confirming, setConfirming] = useState(false);
 	const busy = busyId !== null;
 
 	const items: MenuItem[] = [
@@ -220,12 +224,7 @@ function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) 
 			danger: true,
 			separatorBefore: true,
 			disabled: busy,
-			onSelect: () =>
-				void act(
-					automation.id,
-					() => window.juno.automations.remove(automation.id),
-					`${automation.name} deleted.`,
-				),
+			onSelect: () => setConfirming(true),
 		},
 	];
 
@@ -234,7 +233,15 @@ function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) 
 			<div className="flex items-center gap-3">
 				<div className="min-w-0 flex-1">
 					<p className="truncate text-dense font-[var(--weight-medium)]">
-						{automation.name}
+						{/* The name opens the automation's form, the same as Edit in its menu. */}
+						<button
+							type="button"
+							disabled={busy}
+							onClick={() => onEdit(automation)}
+							className="rounded-[var(--radius-sm)] text-left transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+						>
+							{automation.name}
+						</button>
 						{automation.enabled ? null : (
 							<span className="ml-2 font-[var(--weight-normal)] text-[var(--ink-muted)]">off</span>
 						)}
@@ -266,6 +273,24 @@ function AutomationRow({ automation, busyId, onEdit, act }: AutomationRowProps) 
 
 			{menu.at ? (
 				<ContextMenu at={menu.at} items={items} onClose={menu.close} ariaLabel={automation.name} />
+			) : null}
+
+			{confirming ? (
+				<Dialog title={`Delete ${automation.name}?`} width="narrow" onClose={() => setConfirming(false)}>
+					<p className="mt-3 text-base">It stops running, and it cannot be restored.</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button onClick={() => setConfirming(false)}>Cancel</Button>
+						<Button
+							variant="danger"
+							onClick={() => {
+								setConfirming(false);
+								void act(automation.id, () => window.juno.automations.remove(automation.id), `${automation.name} deleted.`);
+							}}
+						>
+							Delete
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 		</div>
 	);

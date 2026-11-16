@@ -11,10 +11,12 @@
  */
 import { clipboard } from "electron";
 import type { MenuMainAction, MenuOutcome, MenuRequest } from "../../shared/menu";
+import { openedNotice } from "../../shared/opened";
 import { getDb, type Db } from "../db";
 import * as calendar from "./calendar";
 import * as clients from "./clients";
 import * as documentActions from "./document-actions";
+import * as documents from "./documents";
 import { todayIsoDate } from "./document-context";
 import * as projectActions from "./project-actions";
 import * as notes from "./notes";
@@ -72,9 +74,13 @@ export async function perform(request: MenuRequest, action: MenuMainAction, db: 
 				await documentActions.downloadLatest(request.id, db);
 				return { type: "none" };
 
-			case "open-in-default-app":
-				await documentActions.openPdf(request.id, db);
-				return { type: "none" };
+			case "open-in-default-app": {
+				const opened = await documentActions.openPdf(request.id, db);
+				const record = await documents.get(request.id, db);
+				const message = record ? openedNotice(record.title, opened) : null;
+				// The same words Enter shows. Nothing on screen changed, so nothing is read again.
+				return message ? { type: "notice", message } : { type: "none" };
+			}
 
 			case "open-folder": {
 				const project = projects.requireProject(request.id, db);

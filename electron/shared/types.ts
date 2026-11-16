@@ -594,6 +594,13 @@ export type ThemeSetting = "system" | "light" | "dark";
  */
 export type SettingsSection = "general" | "business" | "mail" | "documents" | "security" | "mcp";
 
+/**
+ * Somewhere inside a settings tab a screen can send you, beyond the tab: the
+ * Add calendar page, or a new rule on one mail account's page. Both live on
+ * the Mail accounts tab.
+ */
+export type SettingsTarget = { kind: "add-calendar" } | { kind: "new-rule"; accountId: string };
+
 /** The four records that are made in a small window of their own (decision 60). */
 export type NewRecordKind = "event" | "client" | "project" | "reminder";
 
@@ -697,8 +704,6 @@ export interface AppSettings {
 	mailTemplateSeedVersion: number;
 	/** The same for the intros and outros a first install is given. */
 	mailBlockSeedVersion: number;
-	/** The same for document templates: 0 is never, and it tells a first install from an upgrade. */
-	documentTemplateSeedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
 	/**
@@ -1542,23 +1547,6 @@ export interface MailContainer {
 	box: MailBoxStyle;
 	actions: MailAction[];
 	children: MailNode[];
-	/**
-	 * Set on a document template's container that is a component placed rather
-	 * than drawn (decision 65). Its children are not stored: they are the
-	 * component's, read when the template is drawn or printed, so editing the
-	 * component changes it here. Left out on everything else.
-	 */
-	component?: ComponentPlacement | null;
-}
-
-/**
- * What a placement holds: which component, and a value for each input it asks
- * for. A value that is exactly `{{document.<key>}}` passes one of the
- * template's own inputs through; anything else is the text itself.
- */
-export interface ComponentPlacement {
-	componentId: string;
-	values: Record<string, string>;
 }
 
 /**
@@ -1765,282 +1753,7 @@ export interface MailLayout {
 	breakpoints: MailBreakpoint[];
 }
 
-/* --------------------------------------------- document templates: the page */
-
-/** Millimetres. A page is measured the way a printer measures it. */
-export type Mm = number;
-
-export interface PageMargin {
-	top: Mm;
-	right: Mm;
-	bottom: Mm;
-	left: Mm;
-}
-
-export type LayoutAlign = "left" | "center" | "right" | "justify";
-
-/**
- * One thing on a page. A block either flows in the column inside the margin or
- * sits in a box at a position, which is the same two choices a PDF gives.
- *
- * `html` on a paragraph or a cell is the small allowed set the editor produces:
- * `strong`, `em`, `u`, `s`, `br`, `a`, and `{{ }}` placeholders. It is compiled
- * into the document, so it is sanitised on the way in.
- */
-export type LayoutBlock =
-	| { id: string; kind: "heading"; level: 1 | 2 | 3; text: string; align: LayoutAlign }
-	| { id: string; kind: "paragraph"; html: string; align: LayoutAlign }
-	| { id: string; kind: "list"; ordered: boolean; items: string[] }
-	| { id: string; kind: "image"; src: string; alt: string; widthMm: Mm; align: LayoutAlign }
-	| { id: string; kind: "spacer"; heightMm: Mm }
-	| { id: string; kind: "divider" }
-	| {
-			id: string;
-			kind: "table";
-			/** Widths are percentages of the column, and should add up to 100. */
-			columns: { header: string; widthPct: number }[];
-			rows: string[][];
-			/** A header row is drawn in bold over a rule. */
-			headerRow: boolean;
-	  }
-	| {
-			id: string;
-			kind: "signature";
-			label: string;
-			/** Where the signature image is stamped when the document is signed. */
-			widthMm: Mm;
-	  };
-
-/**
- * A block pinned to a page. `xMm` and `yMm` are from the top left corner of the
- * paper, not of the text column, because that is what a position on a page
- * means to the person placing it.
- */
-export interface LayoutBox {
-	id: string;
-	xMm: Mm;
-	yMm: Mm;
-	widthMm: Mm;
-	block: LayoutBlock;
-}
-
-export interface LayoutPage {
-	id: string;
-	/** Flows down the column inside the margin, in this order. */
-	blocks: LayoutBlock[];
-	/** Placed on the paper, over the flow. */
-	boxes: LayoutBox[];
-}
-
-/**
- * The editable shape of a document template. `bodyHtml` is compiled from this
- * on every save, so the renderer and the PDF pipeline never learn that a page
- * model exists.
- *
- * `version` is the shape of this object, not the template's own version number.
- */
-export interface DocumentLayout {
-	version: 1;
-	pageSize: "A4";
-	margin: PageMargin;
-	pages: LayoutPage[];
-}
-
-/* ------------------------------------------- document templates: the canvas */
-
-/** The paper sizes a document template can be laid out on. */
-export type PaperSize = "A3" | "A4" | "A5" | "A6" | "letter" | "legal";
-
-export type PaperOrientation = "portrait" | "landscape";
-
-export interface DocumentPaper {
-	size: PaperSize;
-	orientation: PaperOrientation;
-}
-
-/**
- * A document template laid out on the same canvas as a mail template, on paper
- * of a fixed size. Every top-level node of `layout` is a page: a section
- * exactly the size of the paper, whose padding is the page margin. The page
- * sizes are kept in step with `paper` by `normaliseCanvas`
- * (shared/paper.ts), whoever wrote the canvas.
- *
- * A canvas template fills in what it declares as inputs and nothing else: no
- * value is taken from a client, a project or the owner's details, so every
- * placeholder in it is `{{document.<input key>}}`, or a picture it carries,
- * `{{asset.<key>}}`.
- *
- * `version` is the shape of this object.
- */
-export interface DocumentCanvas {
-	version: 1;
-	paper: DocumentPaper;
-	layout: MailLayout;
-}
-
-/** A picture a document template carries, stored as a file Juno holds. */
-export interface DocumentTemplateAsset extends Standard {
-	templateId: string;
-	fileName: string;
-	mimeType: string;
-	byteSize: number;
-	/** What the canvas writes as an image's source: `{{asset.<key>}}`. */
-	token: string;
-	/** Where the window draws it from. Never a path. */
-	url: string;
-}
-
-/** A picture to add to a template: its name and its bytes. */
-export interface DocumentTemplateAssetInput {
-	templateId: string;
-	fileName: string;
-	data: Uint8Array;
-}
-
-/**
- * A canvas template, or a draft of one, filled in with values typed by hand.
- * Nothing is stored. `values` are keyed by input key.
- */
-export interface DocumentCanvasRender {
-	templateId: string;
-	/** A draft canvas and inputs to render instead of the stored ones, for the editor. */
-	canvas?: DocumentCanvas;
-	inputs?: TemplateInput[];
-	values: Record<string, string>;
-}
-
-export interface DocumentCanvasPdf {
-	pdf: Uint8Array;
-	/** Inputs with no value, by key. Each one is a marked gap in the PDF. */
-	missing: string[];
-}
-
-/* ----------------------------------- document templates: the components */
-
-/**
- * A piece of a page made once and placed in many document templates: a
- * letterhead, a signature block, a price table (decision 65). `root` is a
- * container rather than a page, with the content of the component under it.
- * It declares inputs of its own, written `{{document.<key>}}` inside it, and
- * its pictures belong to it (`DocumentComponentAsset`).
- */
-export interface DocumentComponent extends Standard {
-	name: string;
-	description: string | null;
-	root: MailContainer;
-	/** The fonts `root` uses, which a template that places it takes on. */
-	fonts: MailFont[];
-	inputs: TemplateInput[];
-	/** How many live templates place it. */
-	usedBy: number;
-}
-
-export interface DocumentComponentInput {
-	name: string;
-	description?: string | null;
-	root?: MailContainer;
-	fonts?: MailFont[];
-	inputs?: TemplateInput[];
-}
-
-export type DocumentComponentPatch = Partial<DocumentComponentInput>;
-
-/** A template that places a component, for the message that stops a delete. */
-export interface ComponentUse {
-	templateId: string;
-	templateName: string;
-}
-
-/** A picture a component keeps. The canvas writes it as `{{asset.<key>}}`, like a template's own. */
-export interface DocumentComponentAsset extends Standard {
-	componentId: string;
-	fileName: string;
-	mimeType: string;
-	byteSize: number;
-	token: string;
-	url: string;
-}
-
-export interface DocumentComponentAssetInput {
-	componentId: string;
-	fileName: string;
-	data: Uint8Array;
-}
-
-/** A component drawn on paper by itself, with its inputs at their starting values. */
-export interface DocumentComponentRender {
-	componentId: string;
-	/** A draft to print instead of the stored one, for the editor. */
-	canvas?: DocumentCanvas;
-	inputs?: TemplateInput[];
-	values: Record<string, string>;
-}
-
-/** Detaching a placed component from a draft of a template. */
-export interface DetachInput {
-	templateId: string;
-	/** The draft the editor holds. Left out, the stored canvas and inputs. */
-	canvas?: DocumentCanvas;
-	inputs?: TemplateInput[];
-	/** The id of the placement: a container with a `component`. */
-	nodeId: string;
-}
-
-export interface DetachResult {
-	canvas: DocumentCanvas;
-	inputs: TemplateInput[];
-}
-
 /* ---------------------------------------------------------------- documents */
-
-export interface DocumentTemplate extends Standard {
-	key: string;
-	name: string;
-	description: string | null;
-	language: string;
-	bodyHtml: string;
-	/**
-	 * Null means nobody has checked the text is sound. Every template starts null,
-	 * the example that ships included. See docs/templates.md.
-	 */
-	reviewedAt: Iso | null;
-	version: number;
-	isSystem: boolean;
-	customisedAt: Iso | null;
-	/** Every path the body refers to, for showing what a template needs. */
-	placeholders: string[];
-	/**
-	 * The page model the editor works on. Null means this template is HTML only,
-	 * which is true of anything written before the page editor existed, and stays
-	 * true for a template somebody prefers to keep as HTML.
-	 */
-	layout: DocumentLayout | null;
-	/**
-	 * The canvas, for a template laid out on paper of a fixed size. When set it
-	 * is what the editor shows and what the body is compiled from.
-	 */
-	canvas: DocumentCanvas | null;
-	/** What the template asks for when it is used. Empty when it asks nothing. */
-	inputs: TemplateInput[];
-}
-
-export type DocumentTemplateInput = {
-	name: string;
-	/** Left out, a fresh template gets one empty page. */
-	bodyHtml?: string;
-	key?: string;
-	description?: string | null;
-	language?: string;
-	/** Passing a layout compiles the body from it and ignores `bodyHtml`. */
-	layout?: DocumentLayout | null;
-	/** Passing a canvas compiles the body from it and ignores `layout` and `bodyHtml`. */
-	canvas?: DocumentCanvas | null;
-	inputs?: TemplateInput[];
-};
-
-export type DocumentTemplatePatch = Partial<
-	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language" | "layout" | "canvas" | "inputs">
->;
 
 export interface DocumentRecord extends Standard {
 	/** Null for a document kept under a project of the owner's own, or under nothing. */
@@ -2066,14 +1779,25 @@ export interface DocumentRecord extends Standard {
 	sourceKind: DocumentSourceKind;
 	/** How many files this document has been. Always at least one once it has a PDF. */
 	versionCount: number;
-	/** The newest version, which is the one `pdfPath` points at. Null before the first PDF. */
-	latestVersion: { id: string; kind: DocumentVersionKind; fileDate: Iso } | null;
+	/** The newest version, which is the one `pdfPath` points at. Null before the first file. */
+	latestVersion: DocumentLatestVersion | null;
+}
+
+/** What a list needs to know about a document's newest file: its kind decides the tile, the preview and Sign. */
+export interface DocumentLatestVersion {
+	id: string;
+	kind: DocumentVersionKind;
+	fileDate: Iso;
+	fileName: string | null;
+	/** `application/pdf` for every version kept before any file could be a document. */
+	mediaType: string;
+	byteSize: number | null;
 }
 
 export type DocumentSourceKind = "generated" | "imported" | "page";
 
 export interface ImportDocumentInput {
-	/** An absolute path to a PDF that exists. Copied in, never referenced. */
+	/** An absolute path to a file that exists. Copied in, never referenced. Any type. */
 	sourcePath: string;
 	clientId?: string | null;
 	title?: string;
@@ -2081,9 +1805,22 @@ export interface ImportDocumentInput {
 	issuedOn?: IsoDate;
 }
 
-/** What a version is. Where it came from is `DocumentVersionSource`. */
-export type DocumentVersionKind = "generated" | "imported" | "stamped" | "signed";
-export type DocumentVersionSource = "generate" | "picker" | "drop" | "mail" | "sign" | "agent";
+/**
+ * What a version is. Where it came from is `DocumentVersionSource`.
+ * `edited` was saved in another app from a working copy (decision 75);
+ * `converted` is a PDF Juno or Word made from the version before it (decision 77).
+ */
+export type DocumentVersionKind = "generated" | "imported" | "stamped" | "signed" | "edited" | "converted";
+export type DocumentVersionSource =
+	| "generate"
+	| "picker"
+	| "drop"
+	| "mail"
+	| "sign"
+	| "agent"
+	| "external"
+	| "convert"
+	| "duplicate";
 
 /** One file a document has been. Newest first wherever a list of them is returned. */
 export interface DocumentVersion extends Standard {
@@ -2091,6 +1828,10 @@ export interface DocumentVersion extends Standard {
 	kind: DocumentVersionKind;
 	source: DocumentVersionSource;
 	fileName: string | null;
+	/** What kind of file it is. `application/pdf` for every version kept before any file could be a document. */
+	mediaType: string;
+	/** In bytes. Null for a version kept before sizes were recorded. */
+	byteSize: number | null;
 	/** Orders the versions: the file's own date for an import, the moment it was made otherwise. */
 	fileDate: Iso;
 	fileHash: string | null;
@@ -2106,7 +1847,15 @@ export interface DocumentVersion extends Standard {
 	hasCertificate: boolean;
 }
 
-export type DocumentTimelineKind = "created" | "generated" | "imported" | "stamped" | "signed" | "emailed";
+export type DocumentTimelineKind =
+	| "created"
+	| "generated"
+	| "imported"
+	| "stamped"
+	| "signed"
+	| "edited"
+	| "converted"
+	| "emailed";
 
 /** One thing that happened to a document, newest first wherever a list of them is returned. */
 export interface DocumentTimelineEntry {
@@ -2117,14 +1866,17 @@ export interface DocumentTimelineEntry {
 	detail: string | null;
 	/** The version this entry made, so the viewer can jump to it. Null for an email. */
 	versionId: string | null;
+	/** The conversation an email is in, once Juno has it, so the entry can open it. Null for everything else. */
+	threadId: string | null;
 }
 
 /** What the confirmation asks about, so the wording can say what will really happen. */
 export type VersionUse = "download" | "email" | "sign";
 
 /**
- * A PDF the window hands over: bytes it read from a drop or a picker, or a mail
- * attachment named by id. Never a path. See .claude/rules/security.md section 2.
+ * A file the window hands over: bytes it read from a drop or a picker, or a
+ * mail attachment named by id. Never a path. Any type (decision 75). See
+ * .claude/rules/security.md section 2.
  */
 export type ImportSource =
 	| {
@@ -2139,6 +1891,32 @@ export type ImportSource =
 	  }
 	| { kind: "attachment"; attachmentId: string };
 
+/** A run of words two files share, or that the second adds or leaves out. */
+export interface TextDiffPart {
+	kind: "same" | "added" | "removed";
+	/** The words, one space between each. */
+	text: string;
+	words: number;
+}
+
+/** A file being compared: one Juno keeps, or one coming in. */
+export type CompareSource = ImportSource | { kind: "version"; versionId: string };
+
+export interface CompareTextInput {
+	/** The file Juno keeps: removed words are in it and not in `after`. */
+	before: { kind: "version"; versionId: string };
+	/** The file coming in, or another version: added words are in it and not in `before`. */
+	after: CompareSource;
+}
+
+/**
+ * What two files say differently, word by word. `unreadable` when one of them
+ * has no words Juno can read (a picture, a scan), naming which.
+ */
+export type TextComparison =
+	| { status: "compared"; parts: TextDiffPart[]; added: number; removed: number; same: number; truncated: boolean }
+	| { status: "unreadable"; side: "before" | "after" | "both" };
+
 /** A file read by the main process's picker, ready to be imported. */
 export interface PickedPdf {
 	fileName: string;
@@ -2146,30 +1924,86 @@ export interface PickedPdf {
 	fileDate: Iso;
 }
 
+/** Any file read by the main process's picker, ready to be added as a document. */
+export interface PickedFile extends PickedPdf {
+	mediaType: string;
+}
+
+/** What Ctrl C or Ctrl X on documents did. `toSystem` is false when only Juno can paste them. */
+export interface ClipboardCopyResult {
+	count: number;
+	mode: "copy" | "cut";
+	toSystem: boolean;
+}
+
+/**
+ * What Ctrl V found (decision 82): documents copied in Juno, already pasted;
+ * files copied in Explorer, a picture or text, handed back as files for the
+ * window to add the way Add files does; or nothing.
+ */
+export type PasteResult =
+	| { kind: "documents"; mode: "copy" | "cut"; documents: DocumentRecord[] }
+	| { kind: "files"; source: "files" | "image" | "text"; files: PickedFile[] }
+	| { kind: "empty" };
+
+/** A file an agent has the contents of, kept as a document. Text or base64 bytes, not both. */
+export interface CreateFileInput {
+	fileName: string;
+	text?: string;
+	dataBase64?: string;
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+/**
+ * Why an existing document is offered for an incoming file: the very same
+ * bytes, the same words (a signed or re-saved copy, decision 39), or only the
+ * same name in the place it is going to.
+ */
+export type ImportMatchReason = "bytes" | "text" | "name";
+
 /** A document the incoming file looks like. */
 export interface ImportMatch {
 	documentId: string;
 	title: string;
 	clientId: string | null;
 	clientName: string | null;
-	/** 0 to 1, how much of the text is the same. */
+	projectId: string | null;
+	/** 0 to 1, how much of the text is the same. 1 for the same bytes, 0 for a name only. */
 	score: number;
 	/** The same bytes are already one of this document's versions. */
 	identical: boolean;
-	/** Why it is offered: the same text, or only the same name. */
-	reason: "text" | "name";
+	reason: ImportMatchReason;
+	/** The document's newest file, for showing beside the incoming one. Null for a document with no file yet. */
+	latestVersion: DocumentLatestVersion | null;
 }
 
 export interface ImportAnalysis {
 	fileName: string;
 	/** What the title would be as a document of its own. */
 	defaultTitle: string;
+	/** `defaultTitle`, or the first free variation of it in the place it is going to. */
+	availableTitle: string;
 	/** The client the file probably belongs to: the one asked for, the mail's, or the best match's. */
 	suggestedClientId: string | null;
 	/** Best first. Empty when nothing looks like it. */
 	matches: ImportMatch[];
 	/** The file's date, which decides where it would sit among the versions. */
 	fileDate: Iso;
+	mediaType: string;
+	byteSize: number;
+}
+
+/** Where a document is kept: a client, a project, both, or (for what older installs hold) neither (decisions 48 and 81). */
+export interface DocumentPlace {
+	clientId: string | null;
+	projectId: string | null;
+}
+
+export interface AnalyseImportInput {
+	source: ImportSource;
+	clientId?: string | null;
+	projectId?: string | null;
 }
 
 export interface ImportFileInput {
@@ -2180,33 +2014,193 @@ export interface ImportFileInput {
 	issuedOn?: IsoDate;
 }
 
+/**
+ * A mail attachment kept as a document (decision 75). With `versionOf` it
+ * becomes the next version of that document instead, which is the answer to
+ * "new version or new document" after `documents.analyseImport`.
+ */
+export interface ImportFromMailInput {
+	attachmentId: string;
+	versionOf?: string | null;
+	clientId?: string | null;
+	projectId?: string | null;
+	title?: string;
+}
+
+export interface ImportFromMailResult {
+	document: DocumentRecord;
+	version: DocumentVersion;
+	/** True when it was added to an existing document rather than made into one. */
+	addedAsVersion: boolean;
+}
+
+/** The document a mail attachment already is, by its bytes. */
+export interface AttachmentDocument {
+	documentId: string;
+	title: string;
+	clientId: string | null;
+	projectId: string | null;
+}
+
+/**
+ * Where a conversation's attachments go in one step: the project it is filed
+ * under (which brings its client), or else its client. `linked` is false when
+ * the conversation is filed under neither and this is only a suggestion, from
+ * a project its words or its client point at.
+ */
+export interface ThreadDocumentPlace {
+	clientId: string | null;
+	clientName: string | null;
+	projectId: string | null;
+	projectName: string | null;
+	/** The name the one-step save is labelled with: the project's, or the client's. */
+	name: string;
+	linked: boolean;
+}
+
+/** One attachment of a conversation, and the document it already is, if any. */
+export interface ThreadAttachment {
+	attachmentId: string;
+	messageId: string;
+	fileName: string;
+	document: AttachmentDocument | null;
+}
+
+export interface ThreadAttachments {
+	threadId: string;
+	/** Null when the conversation is filed under nothing and nothing suggests a place. */
+	place: ThreadDocumentPlace | null;
+	attachments: ThreadAttachment[];
+}
+
+export interface SaveThreadAttachmentsInput {
+	threadId: string;
+	/** Some of the conversation's attachments. Left out, every one that is not already a document. */
+	attachmentIds?: string[];
+	/** Where they go. Both left out, the conversation's own project or client. */
+	clientId?: string | null;
+	projectId?: string | null;
+	/** Also file the conversation under the project (or link it to the client) the files are saved to. */
+	linkThread?: boolean;
+}
+
+/**
+ * What became of one attachment. `saved` went straight in; `skipped` is the
+ * same bytes as a version already kept, so nothing changed; `review` looks
+ * like a document already kept (by its words or its name) and waits for the
+ * person to compare the two, because nothing is filed as a version on a
+ * guess (decision 39).
+ */
+export type SavedAttachment =
+	| { attachmentId: string; fileName: string; status: "saved"; document: DocumentRecord }
+	| { attachmentId: string; fileName: string; status: "skipped"; document: AttachmentDocument }
+	| { attachmentId: string; fileName: string; status: "review"; match: ImportMatch }
+	| { attachmentId: string; fileName: string; status: "failed"; message: string };
+
+export interface SaveThreadAttachmentsResult {
+	thread: MailThreadSummary;
+	/** Where the files were saved. */
+	place: DocumentPlace;
+	outcomes: SavedAttachment[];
+}
+
+export interface DocumentMoveInput {
+	/** The place to keep it, by the owner rule (decision 48). A project with a client brings its client. */
+	clientId?: string | null;
+	projectId?: string | null;
+}
+
+/** How a PDF was made from a file (decision 77). `juno` means the layout may differ from the original. */
+export type ConversionRoute = "word" | "juno";
+
+export interface ConvertPdfResult {
+	document: DocumentRecord;
+	version: DocumentVersion;
+	via: ConversionRoute;
+}
+
+/** Pushed to every window whenever documents changed outside the window's own call. */
+export interface DocumentsChanged {
+	documentIds: string[];
+	/** Why, so a window can say it: an edit saved in another app, or anything else. */
+	reason: "edited-outside" | "changed";
+}
+
+/* ------------------------------------------------------------- previews */
+
+/**
+ * What a preview is asked for: a document's newest file, one version, a mail
+ * attachment or a project file, each by id, or bytes the window is about to
+ * add. Never a path (decision 76).
+ */
+export type FilePreviewSource =
+	| { kind: "document"; documentId: string }
+	| { kind: "version"; versionId: string }
+	| { kind: "attachment"; attachmentId: string }
+	| { kind: "asset"; assetId: string }
+	| { kind: "bytes"; fileName: string; data: Uint8Array; fileDate?: Iso };
+
+/** What every preview says about the file, whatever it can show of it. */
+export interface FilePreviewMeta {
+	name: string;
+	/** In bytes. */
+	size: number;
+	mediaType: string;
+	/** Lower case, no dot. Empty when the name has none. */
+	extension: string;
+	/** The file's last change, UTC ISO-8601, when it is known. */
+	modified: Iso | null;
+}
+
+export interface PreviewSheet {
+	name: string;
+	/** Every cell as the text it shows. Rows can be shorter than the widest one. */
+	rows: string[][];
+	/** True when rows past the limit were left out. */
+	truncatedRows: boolean;
+	/** True when columns past the limit were left out. */
+	truncatedColumns: boolean;
+	/** How many rows the sheet has in all, when known. */
+	totalRows: number;
+}
+
+/**
+ * What the window draws for a file (decision 76). Decided in the main process
+ * from the file's type; the window never gets a path.
+ *
+ * - `pdf`: the bytes, for the PDF viewer.
+ * - `image`: a picture at an `app://preview/` address, for an `<img>` only.
+ *   An SVG comes this way too, and `<img>` runs no script in it.
+ * - `html`: a Word file made into sanitised HTML at an `app://preview/`
+ *   address, for a frame with an empty `sandbox`.
+ * - `text`: the text, cut at a limit.
+ * - `table`: each sheet's cells as text, cut at limits.
+ * - `thumbnail`: a picture of the file at an `app://preview/` address: the
+ *   one an iWork file carries, or the one Windows makes.
+ * - `none`: nothing to show beyond `meta`; `reason` says why in a sentence.
+ */
+export type FilePreview =
+	| { kind: "pdf"; meta: FilePreviewMeta; data: Uint8Array }
+	| { kind: "image"; meta: FilePreviewMeta; url: string }
+	| { kind: "html"; meta: FilePreviewMeta; url: string }
+	| { kind: "text"; meta: FilePreviewMeta; text: string; truncated: boolean }
+	| { kind: "table"; meta: FilePreviewMeta; sheets: PreviewSheet[]; truncatedSheets: boolean }
+	| { kind: "thumbnail"; meta: FilePreviewMeta; url: string; from: "iwork" | "system" }
+	| { kind: "none"; meta: FilePreviewMeta; reason: string };
+
+/** What an agent is given for a file: the same decision, with words and cells instead of addresses. */
+export interface FilePreviewForAgent {
+	meta: FilePreviewMeta;
+	kind: FilePreview["kind"];
+	/** The words in the file, cut at a limit. Null when it has none Juno can read. */
+	text: string | null;
+	truncated: boolean;
+	sheets: PreviewSheet[] | null;
+}
+
 export interface AddVersionInput {
 	documentId: string;
 	source: ImportSource;
-}
-
-export interface GenerateDocumentInput {
-	/** Optional: a project with a client brings its client along. */
-	clientId?: string | null;
-	templateId: string;
-	projectId?: string | null;
-	title?: string;
-	issuedOn?: IsoDate;
-	/** Values typed for this document, such as an addendum's change summary. */
-	extras?: Record<string, string>;
-}
-
-export interface GenerateDocumentResult {
-	document: DocumentRecord;
-	/** Placeholders the template wanted and the records could not fill. */
-	missing: string[];
-	/**
-	 * Generating writes the PDF, because a document is a PDF. This is the reason
-	 * it did not, when it did not. The document itself is still saved, so the
-	 * answer is to try the PDF again from the record rather than to fill the
-	 * form in a second time.
-	 */
-	pdfError: string | null;
 }
 
 /**
@@ -2677,6 +2671,17 @@ export const MAIL_FRAME_ORIGIN = "app://mail";
 export const ASSET_ORIGIN = "app://asset";
 
 /**
+ * Where a file's preview is served from (decision 76): a Word file made into
+ * sanitised HTML, a picture, an SVG, or the thumbnail a file carries. A fourth
+ * host, so a fourth origin. Each address is `${PREVIEW_ORIGIN}/<token>`, an
+ * opaque token the main process made for one preview, and each response
+ * carries its own policy, so the window's is never stamped over it. HTML from
+ * here is shown in a frame with an empty sandbox, and everything else by
+ * `<img>` only.
+ */
+export const PREVIEW_ORIGIN = "app://preview";
+
+/**
  * What the reader needs beside the frame: the plain text for a message with no
  * HTML, how many remote images were blocked so it can offer to load them, and
  * every link with its real target, since a click inside the frame goes nowhere.
@@ -2874,7 +2879,7 @@ export interface MailTemplateRender {
 	missing: string[];
 }
 
-export type MailOutboxState = "draft" | "pending" | "queued" | "sending" | "sent" | "failed" | "cancelled";
+export type MailOutboxState = "draft" | "pending" | "queued" | "sending" | "sent" | "failed";
 
 export interface MailOutboxAttachment {
 	id: string;
@@ -3361,7 +3366,6 @@ export type AgentEntityKind =
 	| "mailMessage"
 	| "mailDraft"
 	| "mailTemplate"
-	| "documentTemplate"
 	| "document"
 	| "reminder"
 	| "event"

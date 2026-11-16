@@ -14,6 +14,7 @@ import { Segmented } from "../../components/Segmented";
 import { StatusBadge } from "../../components/StatusBadge";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Pending =
 	| { kind: "hide"; item: ReferenceItem; inUse: number }
@@ -89,7 +90,7 @@ export function ReferenceSection() {
 			description="Removing a value hides it, so records that use it keep it."
 		>
 			{sets === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={6} />
 			) : (
 				<div>
 					<SetPicker sets={sets} selected={current?.set.key ?? null} onSelect={setSelected} />

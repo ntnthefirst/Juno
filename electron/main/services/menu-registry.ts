@@ -16,13 +16,17 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { BlankArea, MenuEntry, MenuRequest } from "../../shared/menu";
 import { BLANK_AREAS, BLOCK_KINDS } from "../../shared/menu";
+import { isOpenableAttachment } from "../../shared/attachment-kind";
+import { extensionOf } from "../../shared/mime";
 import { getDb, type Db } from "../db";
 import { referenceItems } from "../db/schema";
 import * as calendar from "./calendar";
 import * as calendarSubscriptions from "./calendar-subscriptions";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
+import * as clipboard from "./clipboard";
 import * as documents from "./documents";
+import * as mailDocuments from "./document-mail";
 import * as outbox from "./mail-outbox";
 import * as mailTemplates from "./mail-templates";
 import * as notes from "./notes";
@@ -41,7 +45,7 @@ const OWN_NEW: Record<BlankArea, MenuEntry | null> = {
 	projects: { id: "new-project", label: "New project", icon: "projects" },
 	mail: { id: "new-message", label: "New message", icon: "mail" },
 	notes: { id: "new-note", label: "New note", icon: "note" },
-	documents: { id: "new-document", label: "New document", icon: "documents" },
+	documents: { id: "new-page", label: "New page", icon: "documents" },
 };
 
 const EVERYWHERE: MenuEntry[] = [
@@ -56,12 +60,7 @@ function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 	// The mail list has things to do to a list that no other screen has.
 	if (area === "notes") {
 		const [first, ...rest] = EVERYWHERE;
-		return [
-			{ id: "new-note", label: "New note", icon: "note" },
-			{ id: "new-page", label: "New page", icon: "documents" },
-			...(first ? [{ ...first, separatorBefore: true }] : []),
-			...rest,
-		];
+		return [{ id: "new-note", label: "New note", icon: "note" }, ...(first ? [{ ...first, separatorBefore: true }] : []), ...rest];
 	}
 	if (area === "mail") {
 		return [
@@ -70,6 +69,15 @@ function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 			{ id: "select-all", label: "Select all", icon: "check", separatorBefore: true },
 			...(context === "unread" ? [{ id: "mark-all-read", label: "Mark all read", icon: "read" } as const] : []),
 			{ id: "toggle-styled-mail", label: "Styled mail", icon: "templates", separatorBefore: true },
+		];
+	}
+	// A Documents tab's empty space, and Files', fills the place it is in.
+	if (area === "documents") {
+		const paste = clipboard.canPaste();
+		return [
+			...(paste ? [{ id: "paste", label: "Paste", icon: "import", accelerator: "CommandOrControl+V" } as const] : []),
+			{ id: "new-page", label: "New page", icon: "add", separatorBefore: paste },
+			{ id: "add-files", label: "Add files", icon: "import" },
 		];
 	}
 	const own = OWN_NEW[area as BlankArea];
@@ -87,7 +95,48 @@ function isArchivedStatus(statusId: string | null, db: Db): boolean {
 	return row?.key === "archived";
 }
 
+/** Signing needs a PDF; anything else is converted first (decision 77). */
+function isPdfName(fileName: string | null, mediaType: string): boolean {
+	return mediaType === "application/pdf" || extensionOf(fileName ?? "") === "pdf";
+}
+
 const REMOVE: MenuEntry = { id: "delete", label: "Delete", icon: "remove", danger: true, separatorBefore: true };
+
+/**
+ * An attachment in the reader. Docs a company sends go to the job they are
+ * about in one click: "Save to" the conversation's project, or its client,
+ * with the full place picker one step away. One that is already a document
+ * opens that document instead of being offered again. Opening in its own app
+ * is left out for a sender who is not trusted, and for a type the main
+ * process will not hand to the operating system.
+ */
+async function attachmentEntries(id: string, context: MenuRequest["context"], db: Db): Promise<MenuEntry[]> {
+	const threadId = mailDocuments.threadOfAttachment(id, db);
+	if (!threadId) return [];
+	const { place, attachments } = await mailDocuments.forThread(threadId, db);
+	const self = attachments.find((entry) => entry.attachmentId === id);
+	if (!self) return [];
+	const canOpen = context !== "untrusted" && isOpenableAttachment(self.fileName);
+	const entries: MenuEntry[] = [
+		{ id: "preview", label: "Open preview", icon: "visible" },
+		...(canOpen ? [{ id: "open", label: "Open", icon: "external" } as const] : []),
+		{ id: "save-as", label: "Save as", icon: "export" },
+	];
+	if (self.document) {
+		entries.push({ id: "open-document", label: "Open in documents", icon: "documents", separatorBefore: true });
+	} else {
+		if (place?.linked) entries.push({ id: "save-to-place", label: `Save to ${place.name}`, icon: "documents", separatorBefore: true });
+		entries.push({ id: "save-to", label: "Save to...", icon: "import", separatorBefore: !place?.linked });
+	}
+	const unsaved = attachments.filter((entry) => entry.messageId === self.messageId && !entry.document);
+	if (place?.linked && unsaved.length > 1) {
+		entries.push({ id: "save-all-to-place", label: `Save all to ${place.name}`, icon: "documents" });
+	}
+	if (place?.linked && place.projectId) {
+		entries.push({ id: "add-to-project-files", label: `Add to ${place.name} files`, icon: "projects", separatorBefore: true });
+	}
+	return entries;
+}
 
 /** The items for one menu, in order. Empty when the record is gone or the kind has nothing to say. */
 export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promise<MenuEntry[]> {
@@ -160,16 +209,50 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 		case "file": {
 			const file = await documents.get(id, db);
 			if (!file) return [];
-			// A page has no file to hand to another program.
-			const hasFile = file.sourceKind !== "page";
-			return [
-				{ id: "open", label: "Open", icon: "external" },
-				...(hasFile ? [{ id: "open-in-default-app", label: "Open in the default app", icon: "documents" } as const] : []),
-				...(hasFile ? [{ id: "download-file", label: "Download", icon: "export" } as const] : []),
-				...(hasFile ? [{ id: "send-file", label: "Send by mail", icon: "mail" } as const] : []),
-				REMOVE,
+			const page = file.sourceKind === "page";
+			const latest = file.latestVersion;
+			// A file explorer's menu (decision 82): open, the clipboard, then what Juno adds.
+			const clip: MenuEntry[] = [
+				{ id: "copy", label: "Copy", icon: "copy", accelerator: "CommandOrControl+C", separatorBefore: true },
+				...(clipboard.canPaste() ? [{ id: "paste", label: "Paste", icon: "import", accelerator: "CommandOrControl+V" } as const] : []),
+				...(page || latest ? [{ id: "duplicate", label: "Duplicate", icon: "templates", accelerator: "CommandOrControl+D" } as const] : []),
 			];
+			// Several selected: only what applies to all of them at once.
+			if (context === "several") {
+				return [
+					...clip,
+					{ id: "copy-to", label: "Copy to", icon: "copy", separatorBefore: true },
+					{ id: "move-to", label: "Move to", icon: "move-right" },
+					{ ...REMOVE, accelerator: "Delete" },
+				];
+			}
+			const entries: MenuEntry[] = page
+				? [{ id: "open", label: "Open", icon: "external", accelerator: "Enter" }]
+				: [
+						...(latest ? [{ id: "open-in-default-app", label: "Open", icon: "external", accelerator: "Enter" } as const] : []),
+						{ id: "preview", label: "Preview", icon: "panel", accelerator: "Space" },
+					];
+			entries.push(...clip, { id: "rename", label: "Rename", icon: "edit", accelerator: "F2" });
+			entries.push(
+				{ id: "copy-to", label: "Copy to", icon: "copy", separatorBefore: true },
+				{ id: "move-to", label: "Move to", icon: "move-right" },
+			);
+			if (latest && !page) {
+				const pdf = isPdfName(latest.fileName, latest.mediaType);
+				if (!pdf) entries.push({ id: "convert-pdf", label: "Convert to PDF", icon: "sync", separatorBefore: true });
+				// A specimen is never signed, so it is not offered.
+				if (!file.isSpecimen) entries.push({ id: "sign", label: pdf ? "Sign" : "Convert and sign", icon: "sign", separatorBefore: pdf });
+				entries.push(
+					{ id: "download-file", label: "Download", icon: "export", separatorBefore: true },
+					{ id: "send-file", label: "Send by mail", icon: "mail" },
+				);
+			}
+			entries.push({ ...REMOVE, accelerator: "Delete" });
+			return entries;
 		}
+
+		case "attachment":
+			return attachmentEntries(id, context, db);
 
 		case "mail": {
 			const thread = await threads.getThread(id, db);
@@ -271,13 +354,15 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 		case "outbox": {
 			const message = await outbox.get(id, db);
 			if (!message) return [];
-			const editable = message.state === "draft" || message.state === "pending";
+			// Anything that has not gone out is edited or deleted (decision 78).
+			const open = message.state === "sending" || message.state === "sent";
 			return [
-				{ id: "open", label: editable ? "Edit" : "Open", icon: editable ? "edit" : "mail" },
+				open
+					? { id: "open", label: "Open", icon: "mail" }
+					: { id: "edit", label: "Edit", icon: "edit" },
 				...(message.state === "failed" ? [{ id: "retry", label: "Try again", icon: "sync", separatorBefore: true } as const] : []),
-				...(message.state === "queued" || message.state === "pending"
-					? [{ id: "cancel-send", label: "Cancel sending", icon: "stop", separatorBefore: true } as const]
-					: []),
+				// Delete works on the row in Drafts, so the menu says so.
+				...(open ? [] : [{ ...REMOVE, accelerator: "Delete" }]),
 			];
 		}
 

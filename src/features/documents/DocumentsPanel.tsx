@@ -1,267 +1,691 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { openedNotice } from "@shared/opened";
 import type { DocumentRecord } from "@shared/types";
 import { Button } from "../../components/Button";
-import { Icon } from "../../components/Icon";
+import { Dialog } from "../../components/Dialog";
 import { MenuButton } from "../../components/Menu";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
+import { Segmented } from "../../components/Segmented";
+import { Toast } from "../../components/Toast";
+import { ToolbarButton } from "../../components/ToolbarButton";
+import { blankMenuFor } from "../../lib/blank-menu";
+import { dragDocumentsOut } from "../../lib/document-drag";
 import { messageOf } from "../../lib/errors";
+import type { ListCommand } from "../../lib/list-keys";
+import { NO_SELECTION, pruneSelection, selectOnly, type ListSelection } from "../../lib/list-selection";
+import { contextMenuFor } from "../../lib/native-menu";
 import {
+	announceDocumentsChanged,
+	BUSY_ADDING,
 	describeOutcome,
 	itemsFromFiles,
 	itemsFromPicked,
-	onDocumentsChanged,
 	type ImportItem,
 	type ImportOutcome,
 } from "../../lib/pdf-drop";
 import { useFileDrop } from "../../lib/use-file-drop";
+import { useRecentTouch } from "../../lib/use-recent-touch";
 import { AddExistingDialog } from "./AddExistingDialog";
-import { ImportFlow } from "./ImportFlow";
-import { VersionCount } from "./VersionCount";
-import { VersionList } from "./VersionList";
+import { AddFilesFlow } from "./AddFilesFlow";
+import { DocumentDetail } from "./DocumentDetail";
+import { convertToPdf, needsConversion } from "./document-flows";
+import type { DocumentTakeoverRequest } from "./DocumentTakeover";
+import { readClipboard, writeClipboard } from "./explorer-clipboard";
+import { documentItem, documentKey, matchesSearch, nameOf, nextSort, sortItems, type ExplorerItem, type ExplorerSort } from "./explorer-items";
+import { readPrefs, writePrefs } from "./explorer-prefs";
+import { ExplorerView } from "./ExplorerView";
+import { placeKeyOf, type PlaceOption } from "./place-options";
+import { RecordPickerDialog } from "./RecordPickerDialog";
+import { useRecordDocuments, type DocumentsScope } from "./use-record-documents";
+
+export type { DocumentsScope } from "./use-record-documents";
 
 type DocumentsPanelProps = {
 	scope: DocumentsScope;
-	/** The client's or project's name, for "Drop to add to ...". */
+	/** The client's or project's name, or Files, for "Drop to add to ..." and the way back from a preview. */
 	name: string;
-	/** Starting a document from a template is a page, which the screen owns. */
-	onGenerate: () => void;
-	/** Opening one is the same viewer the Documents screen shows, which the screen owns too. */
-	onOpen: (id: string, title: string) => void;
-	/** The client's own counts and timeline are stale once a document is added. */
+	/** Words from the title bar's search: only the rows that have all of them are listed. */
+	search?: string;
+	/** A document asked for from elsewhere, previewed once the list is in. */
+	openDocumentId?: string | null;
+	/** Told once that document is shown, so coming back to the tab later does not show it again. */
+	onOpenedDocument?: () => void;
+	/** The record's own counts and timeline are stale once a document is added or goes. */
 	onChanged: () => void;
+	/** Signing, sending and writing a page are pages, which the screen shows in place of the record. */
+	onTakeOver: (request: DocumentTakeoverRequest) => void;
+	/** Drawn under the documents, inside the same drop: a project's own files. */
+	children?: ReactNode;
 };
 
-/** Whose documents: a client's, or a project's. */
-export type DocumentsScope = { clientId: string } | { projectId: string };
+type Picker = {
+	mode: "copy" | "move";
+	records: DocumentRecord[];
+	current: string | null;
+};
 
-type Load =
-	| { status: "loading" }
-	| { status: "ready"; records: DocumentRecord[] }
-	| { status: "error"; message: string };
+const VIEW_OPTIONS = [
+	{ id: "list" as const, icon: "list" as const, name: "List" },
+	{ id: "grid" as const, icon: "grid" as const, name: "Tiles" },
+];
 
-/** YYYY-MM-DD is a calendar date, so it is split rather than parsed as an instant. */
-function formatDate(date: string | null): string {
-	if (!date) return "";
-	const parts = date.split("-");
-	return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
-}
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 /**
- * A client's or a project's documents, with the three ways to add one. The plus
- * offers a template, a PDF from this computer, or a document Juno already
- * has, and files dropped on the panel are imported for this client or project
- * without being asked which one. A project that has
- * a client brings its client along (document-owner.ts), so a file dropped on
- * a client's project shows on the client's page too.
+ * A client's or a project's Documents tab: the file handling the explorer had,
+ * for that record and without a tree (decisions 75 and 81). A list or tiles,
+ * sorted by any column. One click previews over the content area and closing
+ * comes back here, a double click opens the file in its own app. Files
+ * dropped on the tab, or chosen with Add files, are kept for this record, and
+ * one that looks like a document already here is shown beside it first.
+ *
+ * A client's tab lists the documents of its projects too, with the project in
+ * a column of its own. The documents kept under neither are the Files place
+ * (decision 82), drawn by this same list with Files as its heading.
  */
-export function DocumentsPanel({
-	scope,
-	name,
-	onGenerate,
-	onOpen,
-	onChanged,
-}: DocumentsPanelProps) {
-	const [load, setLoad] = useState<Load>({ status: "loading" });
+export function DocumentsPanel({ scope, name, search = "", openDocumentId = null, onOpenedDocument, onChanged, onTakeOver, children }: DocumentsPanelProps) {
+	const [prefs] = useState(readPrefs);
+	const { load, reload, changedOutside } = useRecordDocuments(scope);
+	const [view, setView] = useState(prefs.view);
+	const [sort, setSort] = useState<ExplorerSort>(prefs.sort);
+	const [details, setDetails] = useState(prefs.details);
 	const [items, setItems] = useState<ImportItem[] | null>(null);
-	const [expanded, setExpanded] = useState<string[]>([]);
-	const [problems, setProblems] = useState<string[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [addingExisting, setAddingExisting] = useState(false);
+	const [heldSelection, setSelection] = useState<ListSelection>(() =>
+		openDocumentId ? selectOnly(documentKey(openDocumentId)) : NO_SELECTION,
+	);
+	const [renaming, setRenaming] = useState<string | null>(null);
+	const [confirm, setConfirm] = useState<DocumentRecord[] | null>(null);
+	const [deleted, setDeleted] = useState<DocumentRecord[] | null>(null);
+	const [picker, setPicker] = useState<Picker | null>(null);
+	const [preview, setPreview] = useState<{ id: string; title: string } | null>(null);
+	const [clip, setClip] = useState(readClipboard);
+	// The document asked for from elsewhere is shown once, when the list it is in has been read.
+	const asked = useRef(openDocumentId);
+	// The files being added came from a paste, so the toast says pasted.
+	const [pasting, setPasting] = useState(false);
 
-	const clientId = "clientId" in scope ? scope.clientId : undefined;
-	const projectId = "projectId" in scope ? scope.projectId : undefined;
+	const files = "files" in scope;
+	const clientId = "clientId" in scope ? scope.clientId : null;
+	const projectId = "projectId" in scope ? scope.projectId : null;
+	// Where what is added here is kept: this record, or no client and no project in Files.
+	const here = { clientId, projectId: clientId ? null : projectId };
+	const hereKey = clientId ? `client:${clientId}` : projectId ? `project:${projectId}` : "files";
+	const noun = files ? (["file", "files"] as const) : (["document", "documents"] as const);
 
-	const reload = useCallback(() => {
-		window.juno.documents
-			.list(clientId ? { clientId } : { projectId })
-			.then((records) => setLoad({ status: "ready", records }))
-			.catch((cause: unknown) => setLoad({ status: "error", message: messageOf(cause) }));
-	}, [clientId, projectId]);
+	useEffect(() => writePrefs({ view }), [view]);
+	useEffect(() => writePrefs({ sort }), [sort]);
+	useEffect(() => writePrefs({ details }), [details]);
+	useRecentTouch("document", preview?.id ?? null);
+
+	const records = useMemo(() => (load.status === "ready" ? load.records : []), [load]);
+	const statusLabels = useMemo(() => new Map((load.status === "ready" ? load.statuses : []).map((item) => [item.id, item.label])), [load]);
+	const shown = useMemo(
+		() => sortItems(records.filter((record) => matchesSearch(record, search)).map(documentItem), sort),
+		[records, sort, search],
+	);
+	const keys = useMemo(() => shown.map((item) => item.key), [shown]);
+	const byKey = useMemo(() => new Map(shown.map((item) => [item.key, item])), [shown]);
+	const selection = useMemo(() => pruneSelection(heldSelection, keys), [heldSelection, keys]);
+	const selected = shown.flatMap((item) => (item.kind === "document" && selection.selected.includes(item.key) ? [item.record] : []));
+	const cutKeys = useMemo(() => new Set(clip && clip.mode === "cut" ? clip.ids.map(documentKey) : []), [clip]);
+
+	const changed = () => {
+		announceDocumentsChanged();
+		reload();
+		onChanged();
+	};
+
+	/* ---------------------------------------------------------- opening */
+
+	function show(record: DocumentRecord) {
+		setSelection(selectOnly(documentKey(record.id)));
+		if (record.sourceKind === "page") onTakeOver({ kind: "page", record });
+		else setPreview({ id: record.id, title: record.title });
+	}
+
+	// What Previous and Next go through: the files of the list, in its order. A page opens as a page.
+	const previewable = shown.flatMap((item) => (item.kind === "document" && item.record.sourceKind !== "page" ? [item.record] : []));
+	const previewIndex = preview ? previewable.findIndex((record) => record.id === preview.id) : -1;
+	const position =
+		previewIndex >= 0
+			? {
+					index: previewIndex,
+					total: previewable.length,
+					onPrevious: () => {
+						const before = previewable[previewIndex - 1];
+						if (before) show(before);
+					},
+					onNext: () => {
+						const after = previewable[previewIndex + 1];
+						if (after) show(after);
+					},
+				}
+			: null;
 
 	useEffect(() => {
-		reload();
-		return onDocumentsChanged(reload);
-	}, [reload]);
+		const wanted = asked.current;
+		if (!wanted || load.status !== "ready") return;
+		asked.current = null;
+		onOpenedDocument?.();
+		const record = load.records.find((entry) => entry.id === wanted);
+		if (record?.sourceKind === "page") onTakeOver({ kind: "page", record });
+		// Shown even when it is not listed here, such as one moved away since the link was made.
+		else setPreview({ id: wanted, title: record?.title ?? "Document" });
+	}, [load, onTakeOver, onOpenedDocument]);
 
-	async function bring(files: File[]) {
-		setProblems([]);
+	/** Closes the preview with the focus on the row of the file it ended on, so the arrow keys carry on from there. */
+	function closePreview() {
+		const key = preview ? documentKey(preview.id) : null;
+		setPreview(null);
+		if (!key) return;
+		window.requestAnimationFrame(() => {
+			const row = document.querySelector<HTMLElement>(`[data-explorer-item="${CSS.escape(key)}"]`);
+			row?.focus({ preventScroll: true });
+			row?.scrollIntoView({ block: "nearest" });
+		});
+	}
+
+	async function openOutside(record: DocumentRecord) {
+		if (record.sourceKind === "page" || !record.latestVersion) {
+			show(record);
+			return;
+		}
+		try {
+			const opened = await window.juno.documents.open(record.id);
+			const said = openedNotice(record.title, opened);
+			if (said) setNotice(said);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	/* ----------------------------------------------------------- adding */
+
+	/** A second batch while the first is still being asked about would take over its place in the flow. */
+	function start(next: ImportItem[]) {
+		if (next.length === 0) return;
+		if (items) setNotice(BUSY_ADDING);
+		else setItems(next);
+	}
+
+	async function bring(dropped: File[]) {
 		setNotice(null);
-		const { items: read, rejected } = await itemsFromFiles(files);
-		setProblems(rejected);
-		if (read.length > 0) setItems(read);
+		start(await itemsFromFiles(dropped));
 	}
 
 	async function choose() {
-		setProblems([]);
 		setNotice(null);
 		try {
-			const picked = await window.juno.documents.pickPdfs();
-			if (picked.length > 0) setItems(itemsFromPicked(picked));
+			start(itemsFromPicked(await window.juno.documents.pickFiles()));
 		} catch (cause: unknown) {
-			setProblems([messageOf(cause)]);
+			setNotice(messageOf(cause));
 		}
 	}
 
 	function finished(outcome: ImportOutcome) {
 		setItems(null);
-		setNotice(describeOutcome(outcome));
-		setProblems((current) => [...current, ...outcome.failures.map((entry) => entry.message)]);
-		if (outcome.documents + outcome.versions > 0) onChanged();
+		const verb = pasting ? "pasted" : "added";
+		setPasting(false);
+		const failures = outcome.failures.map((entry) => `${entry.name}: ${entry.message}`).join(" ");
+		setNotice([describeOutcome(outcome, verb), failures].filter(Boolean).join(" ") || null);
+		if (outcome.documents + outcome.versions > 0) {
+			reload();
+			onChanged();
+		}
 	}
 
-	function toggle(id: string) {
-		setExpanded((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
+	/** A page is a document with no file, made empty here and opened to write in. */
+	async function newPage() {
+		try {
+			const page = await window.juno.pages.create(here);
+			changed();
+			onTakeOver({ kind: "page", record: page.document });
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
 	}
+
+	/* ---------------------------------------------------------- actions */
+
+	async function act(work: () => Promise<unknown>, done?: string) {
+		try {
+			await work();
+			if (done) setNotice(done);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+		changed();
+	}
+
+	function copyOrMove(mode: Picker["mode"], chosen: DocumentRecord[], target: PlaceOption) {
+		const what = chosen.length === 1 ? chosen[0]!.title : plural(chosen.length, "document", "documents");
+		const into = { clientId: target.clientId, projectId: target.projectId };
+		void act(
+			async () => {
+				for (const record of chosen) {
+					if (mode === "copy") await window.juno.documents.copyTo(record.id, into);
+					else await window.juno.documents.move(record.id, into);
+				}
+			},
+			`${what} ${mode === "copy" ? "copied" : "moved"} to ${target.name}.`,
+		);
+	}
+
+	async function convert(record: DocumentRecord, then?: (converted: DocumentRecord) => void) {
+		try {
+			const done = await convertToPdf(record);
+			setNotice(done.notice);
+			changed();
+			then?.(done.record);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	function sign(record: DocumentRecord) {
+		if (needsConversion(record)) void convert(record, (converted) => onTakeOver({ kind: "sign", record: converted }));
+		else onTakeOver({ kind: "sign", record });
+	}
+
+	/** A page, or a document with a file: one with no file yet has nothing to copy. */
+	function duplicate(chosen: DocumentRecord[]) {
+		const copies = chosen.filter((record) => record.sourceKind === "page" || record.latestVersion !== null);
+		if (copies.length === 0) return;
+		void act(
+			async () => {
+				for (const record of copies) await window.juno.documents.duplicate(record.id);
+			},
+			copies.length === 1 ? "Document duplicated." : `${copies.length} documents duplicated.`,
+		);
+	}
+
+	/**
+	 * Ctrl C or Ctrl X. The main process holds what was copied and puts the
+	 * files on the system clipboard too, so they paste into Explorer
+	 * (decision 82). The list remembers a cut only to draw it faded.
+	 */
+	async function copyOrCut(mode: "copy" | "cut", chosen: DocumentRecord[] = selected) {
+		const ids = chosen.map((record) => record.id);
+		if (ids.length === 0) return;
+		try {
+			const result = await window.juno.documents.clipboard.copy(ids, mode);
+			writeClipboard({ mode, ids });
+			setClip(readClipboard());
+			const what = result.count === 1 ? "Document" : `${result.count} documents`;
+			setNotice(`${what} ${mode === "copy" ? "copied" : "cut"}.`);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	/**
+	 * Ctrl V: what the system clipboard holds, read by the main process, lands
+	 * here. Documents copied in Juno are pasted at once; files from Explorer, a
+	 * picture or text go through the same questions as Add files.
+	 */
+	async function paste() {
+		try {
+			const result = await window.juno.documents.clipboard.paste(here);
+			if (result.kind === "empty") {
+				setNotice("There is nothing to paste.");
+				return;
+			}
+			if (result.kind === "files") {
+				setPasting(true);
+				start(itemsFromPicked(result.files));
+				return;
+			}
+			if (result.mode === "cut") writeClipboard(null);
+			setClip(readClipboard());
+			const count = result.documents.length;
+			if (count > 0) {
+				setNotice(
+					result.mode === "copy"
+						? `${plural(count, noun[0], noun[1])} pasted.`
+						: `${plural(count, "document", "documents")} moved to ${name}.`,
+				);
+				setSelection({ selected: result.documents.map((record) => documentKey(record.id)), anchor: null, focus: null });
+				changed();
+			}
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+	}
+
+	async function remove(gone: DocumentRecord[]) {
+		const removed: DocumentRecord[] = [];
+		try {
+			for (const record of gone) removed.push(await window.juno.documents.remove(record.id));
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		}
+		if (preview && gone.some((record) => record.id === preview.id)) setPreview(null);
+		setSelection(NO_SELECTION);
+		changed();
+		if (removed.length > 0) setDeleted(removed);
+	}
+
+	async function restore() {
+		const back = deleted;
+		setDeleted(null);
+		if (!back) return;
+		await act(async () => {
+			for (const record of back) await window.juno.documents.restore(record.id);
+		});
+	}
+
+	function command(next: ListCommand) {
+		switch (next.kind) {
+			case "rename":
+				if (selected.length === 1) setRenaming(documentKey(selected[0]!.id));
+				return;
+			case "delete":
+				if (selected.length > 0) setConfirm(selected);
+				return;
+			case "duplicate":
+				duplicate(selected);
+				return;
+			case "copy":
+				void copyOrCut("copy");
+				return;
+			case "cut":
+				void copyOrCut("cut");
+				return;
+			case "paste":
+				void paste();
+				return;
+			default:
+				return;
+		}
+	}
+
+	const pickFor = (mode: Picker["mode"], chosen: DocumentRecord[]) =>
+		setPicker({
+			mode,
+			records: chosen,
+			current: mode === "move" && chosen.length === 1 ? placeKeyOf(chosen[0]!) : null,
+		});
+
+	function itemMenu(item: ExplorerItem, event: MouseEvent) {
+		if (item.kind !== "document") return;
+		const { record } = item;
+		// An action on one of several selected rows is an action on all of them.
+		const together = selected.some((other) => other.id === record.id) && selected.length > 1 ? selected : [record];
+		contextMenuFor(
+			{ kind: "file", id: record.id, ...(together.length > 1 ? { context: "several" as const } : {}) },
+			{
+				preview: () => show(record),
+				// The registry offers Open as `open` only for a page; a file's Open is the
+				// main process's `open-in-default-app`. Either way it does what Enter does.
+				open: () => void openOutside(record),
+				copy: () => void copyOrCut("copy", together),
+				paste: () => void paste(),
+				duplicate: () => duplicate(together),
+				"copy-to": () => pickFor("copy", together),
+				"move-to": () => pickFor("move", together),
+				"convert-pdf": () => void convert(record),
+				sign: () => sign(record),
+				"send-file": () => onTakeOver({ kind: "send", record }),
+				rename: () => setRenaming(item.key),
+				delete: () => setConfirm(together),
+				done: (message) => {
+					changed();
+					if (message) setNotice(message);
+				},
+				failed: setNotice,
+				notice: setNotice,
+			},
+		)(event);
+	}
+
+	const blankMenu = blankMenuFor("documents", {
+		paste: () => void paste(),
+		"add-files": () => void choose(),
+		"new-page": () => void newPage(),
+	});
 
 	const drop = useFileDrop((files) => void bring(files));
-	const records = load.status === "ready" ? load.records : [];
+
+	/* ------------------------------------------------------------- draw */
+
+	const count =
+		load.status !== "ready"
+			? ""
+			: selection.selected.length > 0
+				? `${selection.selected.length} of ${shown.length} selected`
+				: plural(shown.length, noun[0], noun[1]);
+
+	const previewItem = preview ? byKey.get(documentKey(preview.id)) : undefined;
 
 	return (
-		<section
-			{...drop.bind}
-			className={`relative rounded-[var(--radius-lg)] ${
-				drop.dragging ? "outline-2 outline-dashed outline-offset-4 outline-[var(--accent)]" : ""
-			}`}
-		>
-			<div className="mb-4 flex items-center justify-between gap-4">
-				<h3 className="text-h3">Documents</h3>
-				<MenuButton
-					ariaLabel="Add a document"
-					items={[
-						{ id: "template", label: "From a template", icon: "documents", onSelect: onGenerate },
-						{ id: "import", label: "Import a PDF", icon: "import", onSelect: () => void choose() },
-						{
-							id: "existing",
-							label: "Add an existing document",
-							icon: "link",
-							onSelect: () => {
-								setNotice(null);
-								setAddingExisting(true);
-							},
-						},
-					]}
-					label="New"
-					icon="add"
-				/>
-			</div>
+		<>
+			<section
+				{...drop.bind}
+				aria-label={files ? "Files" : `Documents of ${name}`}
+				className={`relative rounded-[var(--radius-lg)] ${drop.dragging ? "outline-2 outline-dashed outline-offset-4 outline-[var(--accent)]" : ""}`}
+			>
+				<div className="mb-3 flex min-h-[40px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
+					<div className="flex min-w-0 items-baseline gap-2.5">
+						<h3 className="text-h3">{files ? "Files" : "Documents"}</h3>
+						<span aria-live="polite" className="tabular text-sm text-[var(--ink-muted)]">
+							{count}
+						</span>
+					</div>
+					<div className="flex flex-none items-center gap-1">
+						<Segmented size="icons-compact" label="Layout" value={view} onChange={setView} options={VIEW_OPTIONS} />
+						<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line)]" />
+						{files ? (
+							// Files has one thing to make, a page. Bringing an existing document here is Move to.
+							<ToolbarButton icon="add" label="New" onClick={() => void newPage()} />
+						) : (
+							<MenuButton
+								size="dense"
+								ariaLabel="New document"
+								label="New"
+								icon="add"
+								items={[
+									{
+										id: "page",
+										label: "Page",
+										icon: "note",
+										onSelect: () => void newPage(),
+									},
+									{
+										id: "existing",
+										label: "An existing document",
+										icon: "link",
+										separatorBefore: true,
+										onSelect: () => {
+											setNotice(null);
+											setAddingExisting(true);
+										},
+									},
+								]}
+							/>
+						)}
+						<ToolbarButton icon="import" label="Add files" onClick={() => void choose()} />
+					</div>
+				</div>
 
-			{load.status === "loading" ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
-			) : load.status === "error" ? (
-				<div className="border-l-2 border-[var(--risk)] pl-4">
-					<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the documents.</p>
-					<p data-selectable className="mt-1 text-sm text-[var(--ink-muted)]">
-						{load.message}
-					</p>
-				</div>
-			) : records.length === 0 ? (
-				<div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--line-strong)] px-6 py-10 text-center">
-					<p className="font-[var(--weight-medium)]">No documents yet</p>
-					<p className="mx-auto mt-1 max-w-[46ch] text-dense text-[var(--ink-muted)]">
-						Drop PDF files here, or use the plus to start one from a template, import one, or add a document Juno already has. A file that is an existing document again is offered as a new version.
-					</p>
-				</div>
-			) : (
-				<ul>
-					{records.map((record) => (
-						<li key={record.id} className="border-b border-[var(--line)] py-3 text-base">
-							<div className="flex items-center justify-between gap-4">
-							<div className="flex min-w-0 items-center gap-3">
-								<span
-									aria-hidden
-									className={`flex h-8 w-8 flex-none items-center justify-center rounded-[var(--radius-md)] ${
-										record.sourceKind === "page"
-											? "bg-[var(--accent-soft)] text-[var(--accent)]"
-											: record.sourceKind === "imported"
-												? "bg-[var(--risk-soft)] text-[var(--risk)]"
-												: "bg-[var(--sunken)] text-[var(--ink-muted)]"
-									}`}
-								>
-									<Icon name={record.sourceKind === "page" ? "edit" : "documents"} size={16} />
-								</span>
-								<div className="min-w-0">
-									<span data-selectable className="block truncate text-base font-[var(--weight-medium)]">
-										{record.title}
-									</span>
-									<span className="flex items-center gap-2 text-[var(--ink-muted)]">
-										{record.sourceKind === "imported" ? "Imported PDF" : record.sourceKind === "page" ? "Page" : "From a template"}
-										{record.versionCount > 0 ? (
-											<VersionCount
-												count={record.versionCount}
-												open={expanded.includes(record.id)}
-												onToggle={() => toggle(record.id)}
-											/>
-										) : null}
-									</span>
-								</div>
-							</div>
-							<div className="flex shrink-0 items-center gap-3">
-								<span className="tabular text-micro text-[var(--ink-faint)]">
-									{formatDate(record.issuedOn)}
-								</span>
-								<Button
-									size="dense"
-									disabled={record.pdfPath === null}
-									onClick={() => onOpen(record.id, record.title)}
-								>
-									Open
-								</Button>
-							</div>
-							</div>
-							{expanded.includes(record.id) ? (
-								<div className="mt-2 pl-9">
-									<VersionList documentId={record.id} nested />
-								</div>
-							) : null}
-						</li>
-					))}
-				</ul>
-			)}
+				{load.status === "error" ? (
+					<div role="alert" className="animate-fade border-l-2 border-[var(--risk)] pl-4">
+						<p className="font-[var(--weight-medium)] text-[var(--risk)]">Could not load the documents.</p>
+						<p data-selectable className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
+							{load.message}
+						</p>
+						<div className="mt-3">
+							<Button size="dense" onClick={reload}>
+								Try again
+							</Button>
+						</div>
+					</div>
+				) : (
+					// Clipped for the corners without becoming a scroller, so the column headers stay sticky as the page scrolls.
+					<div className="overflow-clip rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
+						{load.status === "loading" ? (
+							<RowsSkeleton rows={4} label="Loading the documents" />
+						) : (
+							<ExplorerView
+								items={shown}
+								view={view}
+								selection={selection}
+								onSelection={setSelection}
+								statusLabels={statusLabels}
+								sort={sort}
+								onSort={(by) => setSort((current) => nextSort(current, by))}
+								whereColumn={clientId ? "project" : null}
+								renamingKey={renaming}
+								onRename={(item, title) => {
+									setRenaming(null);
+									if (item.kind === "document") void act(() => window.juno.documents.rename(item.record.id, title));
+								}}
+								onRenameEnd={() => setRenaming(null)}
+								cutKeys={cutKeys}
+								onActivate={(item, how) => {
+									if (item.kind !== "document") return;
+									if (how === "open") void openOutside(item.record);
+									else show(item.record);
+								}}
+								onCommand={command}
+								onItemMenu={itemMenu}
+								onBlankMenu={blankMenu}
+								dragOf={(item) =>
+									item.kind === "document"
+										? {
+												kind: "documents",
+												ids: selected.some((record) => record.id === item.record.id)
+													? selected.map((record) => record.id)
+													: [item.record.id],
+											}
+										: null
+								}
+								onDragOut={(item, event) => {
+									if (item.kind !== "document" || !item.record.latestVersion) return false;
+									const ids = selected.some((record) => record.id === item.record.id) ? selected : [item.record];
+									if (ids.some((record) => !record.latestVersion)) return false;
+									dragDocumentsOut(
+										event,
+										ids.map((record) => record.id),
+									);
+									return true;
+								}}
+								canDropOn={() => false}
+								onDropOn={() => undefined}
+								label={files ? "Files" : `Documents of ${name}`}
+								fill={false}
+								empty={
+									<div className="px-6 py-10 text-center">
+										<p className="font-[var(--weight-medium)]">{files ? "No files yet" : "No documents yet"}</p>
+										<p className="mx-auto mt-1 max-w-[46ch] text-dense text-[var(--ink-muted)]">
+											{search.trim()
+												? "Nothing here has those words."
+												: files
+													? "Your own files, kept under no client and no project. Drop any here, or press Add files."
+													: "Drop any files here, or press Add files. A file that looks like a document already here is shown beside it first."}
+										</p>
+									</div>
+								}
+							/>
+						)}
+					</div>
+				)}
 
-			{drop.dragging ? (
-				<div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[var(--radius-lg)] bg-[var(--accent-soft)]/80">
-					<p className="font-[var(--weight-medium)] text-[var(--accent)]">
-						Drop to add to {name}
-					</p>
-				</div>
-			) : null}
+				{drop.dragging ? (
+					<div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[var(--radius-lg)] bg-[var(--accent-soft)]/80">
+						<p className="font-[var(--weight-medium)] text-[var(--accent)]">Drop to add to {name}</p>
+					</div>
+				) : null}
 
-			{notice ? (
-				<p role="status" className="mt-3 text-sm text-[var(--ink-muted)]">
-					{notice}
-				</p>
-			) : null}
-			{problems.length > 0 ? (
-				<div className="mt-3 border-l-2 border-[var(--risk)] pl-4">
-					<ul className="text-sm text-[var(--ink-muted)]">
-						{problems.map((message, index) => (
-							<li key={`${index}:${message}`} data-selectable>
-								{message}
-							</li>
-						))}
-					</ul>
-				</div>
-			) : null}
-			{addingExisting ? (
-				<AddExistingDialog
-					scope={scope}
-					name={name}
-					onClose={() => setAddingExisting(false)}
-					onAdded={(record, from) => {
-						setAddingExisting(false);
-						setNotice(from === "Not linked" ? `${record.title} added.` : `${record.title} moved here from ${from}.`);
-						reload();
-						onChanged();
-					}}
-				/>
-			) : null}
-			{items ? (
-				<ImportFlow
-					items={items}
-					{...(clientId ? { clientId } : {})}
-					{...(projectId ? { projectId } : {})}
-					onDone={finished}
-				/>
-			) : null}
-		</section>
+				{preview ? (
+					<DocumentDetail
+						documentId={preview.id}
+						knownTitle={previewItem ? nameOf(previewItem) : preview.title}
+						position={position}
+						closeLabel={`Back to ${name}`}
+						onClose={closePreview}
+						revision={changedOutside.ids.includes(preview.id) ? changedOutside.at : 0}
+						details={details}
+						onToggleDetails={() => setDetails((value) => !value)}
+						onDeleted={(record) => {
+							setPreview(null);
+							setSelection(NO_SELECTION);
+							changed();
+							setDeleted([record]);
+						}}
+						onChanged={() => {
+							reload();
+							onChanged();
+						}}
+						onSign={sign}
+						onSend={(record) => onTakeOver({ kind: "send", record })}
+						onCopyTo={(record) => pickFor("copy", [record])}
+						onMoveTo={(record) => pickFor("move", [record])}
+						onNotice={setNotice}
+						onTitleChange={(title) => setPreview((current) => (current && current.title !== title ? { ...current, title } : current))}
+					/>
+				) : null}
+
+				{addingExisting && !files ? (
+					<AddExistingDialog
+						scope={clientId ? { clientId } : { projectId: projectId! }}
+						name={name}
+						onClose={() => setAddingExisting(false)}
+						onAdded={(record, from) => {
+							setAddingExisting(false);
+							setNotice(`${record.title} moved here from ${from}.`);
+							changed();
+						}}
+					/>
+				) : null}
+				{confirm ? (
+					<Dialog title="Delete" width="narrow" onClose={() => setConfirm(null)}>
+						<p className="mt-3 text-base">
+							{confirm.length === 1 ? `Delete ${confirm[0]!.title}?` : `Delete ${confirm.length} documents?`} You can undo this straight
+							after.
+						</p>
+						<div className="mt-6 flex justify-end gap-2">
+							<Button onClick={() => setConfirm(null)}>Cancel</Button>
+							<Button
+								variant="danger"
+								onClick={() => {
+									const gone = confirm;
+									setConfirm(null);
+									void remove(gone);
+								}}
+							>
+								Delete
+							</Button>
+						</div>
+					</Dialog>
+				) : null}
+				{items ? <AddFilesFlow items={items} place={here} placeName={name} onDone={finished} /> : null}
+				{picker ? (
+					<RecordPickerDialog
+						title={`${picker.mode === "copy" ? "Copy" : "Move"} ${picker.records.length === 1 ? picker.records[0]!.title : plural(picker.records.length, "document", "documents")}`}
+						confirmLabel={picker.mode === "copy" ? "Copy here" : "Move here"}
+						current={picker.current ?? (picker.mode === "move" ? hereKey : null)}
+						onClose={() => setPicker(null)}
+						onPick={(target) => {
+							const chosen = picker;
+							setPicker(null);
+							copyOrMove(chosen.mode, chosen.records, target);
+						}}
+					/>
+				) : null}
+				{deleted ? (
+					<Toast
+						message={deleted.length === 1 ? `${deleted[0]!.title} deleted.` : `${deleted.length} documents deleted.`}
+						actionLabel="Undo"
+						onAction={() => void restore()}
+						onDismiss={() => setDeleted(null)}
+					/>
+				) : notice ? (
+					<Toast message={notice} onDismiss={() => setNotice(null)} />
+				) : null}
+			</section>
+			{children}
+		</>
 	);
 }

@@ -4,6 +4,7 @@ import { Avatar } from "../../components/Avatar";
 import { CardHeader } from "../../components/CardHeader";
 import { requestOpenClient } from "../../lib/open-client";
 import { requestOpen } from "../../lib/open-entity";
+import { showDocumentWhereKept } from "../../lib/show-in-record";
 import type { Loaded } from "../../lib/use-loaded";
 import { belongsTo } from "../documents/belongs-to";
 import { formatWhen, leadParticipant } from "../mail/format";
@@ -77,7 +78,7 @@ type SideListsProps = {
 	hasAccounts: boolean | null;
 };
 
-/** The right edge: what is unread, the documents touched last, and the clients with news. */
+/** The right edge: what is unread, the documents touched last and the clients with news. */
 export function SideLists({ unread, unreadCount, documents, statuses, clients, hasAccounts }: SideListsProps) {
 	const threads = useMemo(() => (unread.status === "ready" ? unread.value.slice(0, SHOWN) : []), [unread]);
 	const recentDocuments = useMemo(
@@ -95,7 +96,7 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 		[clients],
 	);
 	const statusOf = useMemo(() => new Map(statuses.map((item) => [item.id, item])), [statuses]);
-	const open = (screen: "mail" | "documents" | "clients") => () => requestOpen({ kind: "screen", screen });
+	const open = (screen: "mail" | "clients" | "files") => () => requestOpen({ kind: "screen", screen });
 
 	return (
 		<div className="flex flex-col gap-8">
@@ -125,12 +126,12 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 			</section>
 
 			<section>
-				<CardHeader title="Documents" link={{ label: "All documents", onClick: open("documents") }} />
+				<CardHeader title="Documents" link={{ label: "Files", onClick: open("files") }} />
 				<Block
 					state={documents}
 					what="your documents"
 					isEmpty={recentDocuments.length === 0}
-					empty="Documents you generate or import are listed here."
+					empty="Documents you add are listed here."
 				>
 					{recentDocuments.map((record) => (
 						<ListRow
@@ -140,7 +141,7 @@ export function SideLists({ unread, unreadCount, documents, statuses, clients, h
 							title={record.title}
 							meta={belongsTo(record)}
 							trailing={record.statusId ? statusOf.get(record.statusId)?.label : undefined}
-							onClick={() => requestOpen({ kind: "document", id: record.id, name: record.title })}
+							onClick={() => showDocumentWhereKept(record)}
 						/>
 					))}
 				</Block>

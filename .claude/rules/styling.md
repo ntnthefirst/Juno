@@ -51,7 +51,12 @@ should appear about twice on a screen.
   `features/settings/add-account/ProviderLogo.tsx`, sources in `SOURCES.md`
   beside them) keep their own colours in both themes. They are bundled image
   files, not themed icons, so they never go through `Icon.tsx` or the tokens.
-  The tile around them is tokens as usual. Nothing else qualifies.
+  The tile around them is tokens as usual.
+- **The other exception: file-type icons** (decision 80). The icons in
+  `src/assets/file-types/`, drawn by `components/FileTypeIcon.tsx`, are a bundled
+  set that keeps its own colours in both themes. They are images, never
+  recoloured and never routed through `Icon.tsx`. If one is hard to read on a
+  surface, change the tile around it, not the file. Nothing else qualifies.
 - Spacing uses the 4px scale (`--space-1` through `--space-16`). Radius uses
   `--radius-sm` (6px) for inputs and badges, `--radius-md` (8px) for buttons and
   rows, `--radius-lg` (12px) for cards, `--radius-xl` (16px) for modals. `--radius-full` is avatars
@@ -180,10 +185,19 @@ What the bar holds, from the Title Bar component (`14:221`) and its variants:
 Search, Recent and Reminders at the left, then a divider and the page title,
 which is the record's name while one is open, after the way back and a slash.
 At the right are the screen's own actions, New as a text button, the record's
-"...", a divider and the agent. New makes the screen's own record at once where
-`NEW_AT_RIGHT` in `app/screens.ts` lists the screen, and opens the New menu
-everywhere else (note, page, event, client, project, then Import a file, from
-`NEW_MENU`). With a document open the plus at the left takes its place.
+"...", a divider and the agent. **New offers what the screen starts and nothing
+else** (frames in section 22). Where a screen starts one kind of record
+(`NEW_AT_RIGHT` in `app/screens.ts`: Notes, Clients, Projects, Reminders) it
+makes that at once. Where it starts several it opens that screen's own menu
+from `NEW_MENUS`: Mail (New message, Styled mail, then New folder, New mailbox
+rule, New intro or outro) and Calendar (New event, New reminder, then Subscribe
+to a calendar, Import a calendar file). Overview, which belongs to no one record, keeps
+the whole menu (`NEW_MENU`). An item reaches its screen through
+`requestScreenAction`; a screen on show takes it where it is
+(`useLiveScreenAction`), so the message being read stays open, and New mailbox
+rule and Subscribe to a calendar open the settings window on the page that
+makes one (`SettingsTarget`). With a document open the plus at the left takes
+its place.
 
 Recent, the bell and the agent each open a dropdown (`app/RecentMenu.tsx`,
 `app/RemindersMenu.tsx`, `app/AgentMenu.tsx`), and the foot of the last two
@@ -197,7 +211,7 @@ decided in the service).
 
 **A list's search is in the title bar** (`app/TitleSearch.tsx`), first in the
 right slot, on every screen that filters a list: Clients, Projects, Mail,
-Notes, Documents and both template screens. Ctrl or Cmd F puts the cursor in
+Notes, Files and the Styled mail screen. Ctrl or Cmd F puts the cursor in
 it; an open message or page finds inside itself with the same keys instead, by
 listening on the document, which hears the key first. Ctrl or Cmd Shift F
 opens the palette, like Ctrl or Cmd K. A list's filters are behind the funnel
@@ -213,8 +227,10 @@ name of an entry is in its tooltip (`components/Tooltip.tsx`, drawn by the
 application, not the native `title`) and in its `aria-label`.
 
 - **Seven places on top, Settings at the bottom.** Overview, Calendar, Clients,
-  Projects, Mail, Notes, Documents; then Settings. `app/screens.ts` lists them.
-  Notes is the seventh (decision 61); an eighth place is a decision, not an edit. The agent is in the title bar, at
+  Projects, Mail, Notes, Files; then Settings. `app/screens.ts` lists them.
+  Documents live on a client's and a project's Documents tab (decision 81),
+  and Files holds the owner's own, kept under neither (decision 82); an
+  eighth place is a decision, not an edit. The agent is in the title bar, at
   the right beside the window's own buttons, with the same three colours.
 - **An entry has three states.** Soft (`--ink-faint`) at rest, firm (`--ink`)
   under the pointer, and when it is the page a `--hover` tile with an iris
@@ -226,17 +242,26 @@ application, not the native `title`) and in its `aria-label`.
   draws 48px entries and 24px icons; the screens use the Sidebar, which wins.
 - **A badge is a dot,** and the count goes in the tooltip and the accessible name.
 - **Screens without an entry** light the entry they belong to
-  (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail,
-  Templates under Documents.
+  (`SIDEBAR_ENTRY`): Reminders under Overview, Styled mail under Mail.
 
-### The switch
+### Files and the Documents tabs
 
-Documents holds a second screen. It is not a second sidebar entry: it is
-`components/SectionSwitch.tsx`, a two-sided control at the top of the page
-(Documents | Templates), reached through the shell with
-`requestOpen({ kind: "screen", screen })` so the target opens on its list. Add
-a pair by adding a `ScreenSwitch` in `app/screens.ts`. Screens a form or an
-editor has taken over show no switch, because they replace the page it sits on.
+A client's and a project's Documents tab (`features/documents/DocumentsPanel.tsx`)
+is laid out as the frames `11 Client Record / Documents` and `13 Project Record
+/ Documents` draw it: a bar with the heading "Documents" and a count at the
+left and, at the right, the view switch (list, tiles), New and Add files as
+quiet text buttons with icons; under it a bordered `--radius-lg` card with the
+column header (Name, Type, Size, Modified, Status, Versions; a client's tab
+adds Project after Name) and 36px rows. A project's own files sit under that
+card as Project files.
+
+Files (`features/files/FilesScreen.tsx`, frames `15 Files / List` and
+`15 Files / Selecting`) is the same panel with no record: the heading "Files"
+and a count of files, New makes a page at once, Add files keeps files there,
+and its search is in the title bar. Every one of these lists selects like a
+file explorer (decision 82): the bar reads "3 of 7 selected" while anything is
+selected, a selected row is `--accent-soft` with no checkbox, and the keys and
+the right-click menu are listed in that decision.
 
 Mail does it differently, by the owner's choice. New message and a Styled mail
 button sit in the title bar while Mail is open, and the button opens a column
@@ -352,14 +377,20 @@ The animations are utilities, not keyframes written at the call site:
   and `0fr`, which the browser does without measuring.
 - **A press gives.** Buttons scale to 97% while down, icon buttons to 90%.
 - **Numbers count up** (`useCountUp`) the first time they have a value. Once.
-- **Loading is the shape of what is coming** (`CardSkeleton`), not the word, so
-  the card does not grow under whatever is below it.
+- **Loading is the shape of what is coming**, not the word, so the card does
+  not grow under whatever is below it. `RowsSkeleton` for a list (rows at
+  `--row-height`, roomy with `avatar`), `CardSkeleton` for a card or a section
+  (`framed={false}` inside one already drawn), `RecordSkeleton` for a client
+  or a project, and `SkeletonBar` for a single line. They pulse in opacity
+  (`animate-skeleton`), and reduced motion stops them on the resting frame.
 - **Reduced motion is honoured in one place.** `global.css` cuts every
   animation and transition to nothing under `prefers-reduced-motion`, and
   `prefersReducedMotion()` is for the code that waits on a delay of its own. A
   new animation needs nothing to opt in.
-- The raised side of `SectionSwitch` slides: each side is its own screen, so it
-  remembers where it was and the new copy moves from there.
+- **A file's full preview scales in** (`components/FullPreview.tsx`,
+  `animate-scale`) over the content area, the tiles of a folder rise one after
+  another, and while a preview is read the space holds the shape of a page
+  (`PreviewSkeleton`), so nothing moves when it lands.
 - **The calendar pages like a scroll** (`features/calendar/PageSlide.tsx`):
   the old month or week slides out the whole way while the next one follows
   edge to edge, with no fade, and the page waits for its items before it
@@ -443,6 +474,14 @@ Not for amounts, which are tabular sans.
   `--ink-faint` does not. Check the pair, not the token in isolation.
 - A row that is clickable gets a visible hover (`bg-accent-soft`) and the same
   state on keyboard focus.
+- **A toast is heard through the window's one live region** (`lib/announce.ts`),
+  never a region of its own: a region added to the page together with its text
+  is not read by every screen reader. Anything else that has to be heard without
+  moving the focus calls `announce()` too.
+- **Something that covers the content takes the focus and gives it back**, as
+  `FullPreview`, `AddFilesFlow` and `AttachmentPlacePage` do, so the list keys
+  underneath never act on what it hides. Its Escape leaves an open menu or an
+  open list under a field (`aria-expanded="true"`) to close itself first.
 
 ## 8. Global CSS stays tiny
 

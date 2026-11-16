@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef } from "react";
+import { Fragment, useEffect, useMemo, useRef } from "react";
 import type { MailOutboxMessage, MailThreadSummary } from "@shared/types";
 import { Avatar } from "../../components/Avatar";
 import { Checkbox } from "../../components/Checkbox";
@@ -12,6 +12,7 @@ import { contextMenuFor } from "../../lib/native-menu";
 import { startThreadDrag } from "./drag";
 import { formatWhen, leadParticipant, participantsLine } from "./format";
 import { OutboxRow } from "./OutboxRow";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 export type ThreadAction =
 	| "open"
@@ -38,7 +39,10 @@ export type ThreadListOutbox = {
 	selectedId: string | null;
 	onSelect: (id: string) => void;
 	onRetry?: (id: string) => void;
-	onCancel?: (id: string) => void;
+	/** Opens a message in the editor, taking it back to a draft first when it is waiting or failed. */
+	onEdit?: (id: string) => void;
+	/** Asks to delete a message that has not gone out. */
+	onDelete?: (id: string) => void;
 };
 
 type ThreadListProps = {
@@ -125,6 +129,26 @@ export function ThreadList({
 		[merged, searching],
 	);
 
+	// The row that last had the focus. When it leaves the list with the focus still on it,
+	// as a draft does once its delete is confirmed, the row now in its place takes the focus,
+	// so the keyboard carries on from where it was instead of from the top of the window.
+	const lastFocus = useRef<{ id: string; index: number } | null>(null);
+	useEffect(() => {
+		const was = lastFocus.current;
+		if (!was || merged.some((entry) => entry.id === was.id)) return;
+		lastFocus.current = null;
+		const active = document.activeElement;
+		if (active !== null && active !== document.body) return;
+		const next = merged[Math.min(was.index, merged.length - 1)];
+		if (next) rows.current.get(next.id)?.focus({ preventScroll: true });
+	}, [merged]);
+	function rememberFocus(event: React.FocusEvent<HTMLUListElement>) {
+		const target: EventTarget = event.target;
+		const index = merged.findIndex((entry) => rows.current.get(entry.id) === target);
+		const entry = merged[index];
+		if (entry) lastFocus.current = { id: entry.id, index };
+	}
+
 	if (error) {
 		return (
 			<div className="border-l-2 border-[var(--risk)] pl-4">
@@ -136,7 +160,7 @@ export function ThreadList({
 		);
 	}
 	if (threads === null || (outbox && outbox.messages === null)) {
-		return <p className="px-4 text-[var(--ink-muted)]">Loading.</p>;
+		return <RowsSkeleton rows={10} avatar label="Loading the conversations" />;
 	}
 	if (merged.length === 0) {
 		return searching ? (
@@ -209,7 +233,16 @@ export function ThreadList({
 			step(-1);
 			return;
 		}
-		// The rest are thread actions, and an unsent message has none.
+		// A message that has not gone out is deleted with the same keys, which ask first (decision 78).
+		if (focusedEntry?.kind === "outbox") {
+			const { state } = focusedEntry.message;
+			if ((event.key === "Delete" || event.key === "Backspace") && state !== "sending" && state !== "sent" && outbox?.onDelete) {
+				event.preventDefault();
+				outbox.onDelete(focusedEntry.id);
+			}
+			return;
+		}
+		// The rest are thread actions.
 		if (focusedEntry?.kind !== "thread") return;
 		const focused = focusedEntry.thread;
 		const shortcuts: Record<string, ThreadAction> = {
@@ -239,7 +272,7 @@ export function ThreadList({
 				One handler for the list rather than one per row: the keys act on
 				whichever row has focus, and a row is a button that already takes it.
 			*/}
-			<ul className="flex flex-col px-2" onKeyDown={onListKeyDown}>
+			<ul className="flex flex-col px-2" onKeyDown={onListKeyDown} onFocus={rememberFocus}>
 				{sections.map((section) => (
 					<Fragment key={section.key}>
 						{section.label ? (
@@ -256,7 +289,8 @@ export function ThreadList({
 										active={entry.id === outbox?.selectedId}
 										onSelect={(id) => outbox?.onSelect(id)}
 										onRetry={outbox?.onRetry}
-										onCancel={outbox?.onCancel}
+										onEdit={outbox?.onEdit}
+										onDelete={outbox?.onDelete}
 										buttonRef={(element) => {
 											if (element) rows.current.set(entry.id, element);
 											else rows.current.delete(entry.id);
@@ -336,6 +370,7 @@ export function ThreadList({
 										</span>
 										<button
 											type="button"
+											data-row-id={thread.id}
 											ref={(element) => {
 												if (element) rows.current.set(thread.id, element);
 												else rows.current.delete(thread.id);

@@ -3,6 +3,7 @@ import type { DocumentsFolder } from "@shared/types";
 import { Button } from "../../components/Button";
 import { messageOf } from "../../lib/errors";
 import { SectionError } from "./Section";
+import { SkeletonBar } from "../../components/SkeletonBar";
 
 type DocumentsFolderSectionProps = {
 	onDone: (message: string) => void;
@@ -65,7 +66,7 @@ export function DocumentsFolderSection({ onDone }: DocumentsFolderSectionProps) 
 						data-selectable
 						className="flex h-10 min-w-0 flex-1 items-center rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-base"
 					>
-						<span className="min-w-0 truncate">{folder?.path ?? "Loading."}</span>
+						{folder ? <span className="min-w-0 truncate">{folder.path}</span> : <SkeletonBar width="40%" />}
 					</p>
 					<Button
 						disabled={busy || folder === null}

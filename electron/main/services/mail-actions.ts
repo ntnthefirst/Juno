@@ -9,7 +9,8 @@
  *
  * So a failure to reach the server is a failure of the whole call, reported to
  * the caller, with nothing changed locally. Half-applied is not a state this
- * offers.
+ * offers. The read state is the one exception, and `setSeen` says why: it is
+ * kept here as pending until the server has it, so a sync cannot put it back.
  *
  * Where a message lands after a move:
  *
@@ -25,7 +26,7 @@
  * a person in the window, or parked for approval when an agent asks, and it
  * says in those words that the copy on the server goes too.
  */
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { MailFileResult, MailSpecialUse } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
@@ -155,14 +156,126 @@ function checkUidValidity(folder: FolderRow, remote: string): void {
 /* --------------------------------------------------------------- flags */
 
 /**
- * Marks messages read or unread, on the server and here.
+ * Marks messages read or unread, here first and on the server after.
  *
- * Cheap, reversible, and the only write in this file that is not filing
- * something. It is still a write, so it is still refused while locked and
- * still parked when an agent asks for it.
+ * The one exception to the order at the top of this file, because reading is
+ * something a person does offline: a message opened on a train has been read,
+ * and the list should say so. The row changes at once and remembers the state
+ * in `seenPending`; a sync in between keeps it (`mail-store.ts`), and the
+ * server is told straight away when it can be reached, or after the next sync
+ * that reaches it (`pushPendingSeen`, from the sync's `afterPass`).
+ *
+ * Cheap, reversible, and not filing anything. It is still a write, so it is
+ * still refused while locked and still parked when an agent asks for it.
  */
 export async function setSeen(messageIds: string[], seen: boolean, db: Db = getDb()): Promise<number> {
-	return setFlag(messageIds, FLAG_SEEN, seen, { isSeen: seen }, db);
+	const rows = messagesWithFolders(db, messageIds);
+	if (rows.length === 0) return 0;
+
+	const stamp = now();
+	const ids = rows.map((row) => row.message.id);
+	for (let i = 0; i < ids.length; i += ID_CHUNK) {
+		db.update(mailMessages)
+			.set({ isSeen: seen, seenPending: seen, updatedAt: stamp })
+			.where(inArray(mailMessages.id, ids.slice(i, i + ID_CHUNK)))
+			.run();
+	}
+	for (const folderId of new Set(rows.map((row) => row.folder.id))) refreshFolderCounts(db, folderId);
+
+	// Not waited on: the answer is already true here, and a server out of reach
+	// takes seconds to say so. What it could not take stays pending.
+	for (const accountId of new Set(rows.map((row) => row.message.accountId))) {
+		void pushSoon(accountId, db);
+	}
+	return rows.length;
+}
+
+/**
+ * Marks messages read or unread on the server, then here, failing whole when
+ * the server cannot be reached. For a step that must have reached the server
+ * before the next one runs: a mailbox rule marks a message read and then moves
+ * it, and the mark has to travel with it.
+ */
+export async function setSeenOnServer(messageIds: string[], seen: boolean, db: Db = getDb()): Promise<number> {
+	return setFlag(messageIds, FLAG_SEEN, seen, { isSeen: seen, seenPending: null }, db);
+}
+
+/** Per account, the push running now, so a second one waits instead of opening another connection. */
+const pushes = new Map<string, Promise<void>>();
+/** Accounts asked to push again while one was running, for rows marked after it read them. */
+const pushAgain = new Set<string>();
+
+function pushSoon(accountId: string, db: Db): Promise<void> {
+	const running = pushes.get(accountId);
+	if (running) {
+		pushAgain.add(accountId);
+		return running;
+	}
+	const run = (async () => {
+		do {
+			pushAgain.delete(accountId);
+			// A failure leaves the rows pending, and the next sync tries again.
+			await pushPendingSeen(accountId, db).catch(() => undefined);
+		} while (pushAgain.has(accountId));
+	})().finally(() => pushes.delete(accountId));
+	pushes.set(accountId, run);
+	return run;
+}
+
+/** Resolves once no read state is being written to a server. Tests wait on it. */
+export async function settledForTests(): Promise<void> {
+	while (pushes.size > 0) await Promise.all([...pushes.values()]);
+}
+
+/**
+ * Writes every read state still waiting for the server, for one account, and
+ * clears what it wrote. Throws when the server cannot be reached, with the
+ * rows left as they were.
+ *
+ * A folder the server has renumbered since is skipped: its uids now name other
+ * messages, and the sync that notices throws its rows away, pending state and
+ * all. A row marked again while this ran keeps the newer state pending.
+ */
+export async function pushPendingSeen(accountId: string, db: Db = getDb()): Promise<number> {
+	const rows = db
+		.select({ message: mailMessages, folder: mailFolders })
+		.from(mailMessages)
+		.innerJoin(mailFolders, eq(mailFolders.id, mailMessages.folderId))
+		.where(
+			and(
+				eq(mailMessages.accountId, accountId),
+				isNotNull(mailMessages.seenPending),
+				isNull(mailMessages.deletedAt),
+				isNull(mailFolders.deletedAt),
+			),
+		)
+		.all();
+	if (rows.length === 0) return 0;
+
+	const groups = [...groupByFolder(rows).values()];
+	let pushed = 0;
+	await withWriter(accountId, db, async (writer) => {
+		for (const group of groups) {
+			const mailbox = await writer.openFolder(group.folder.path);
+			if (group.folder.uidValidity !== null && group.folder.uidValidity !== mailbox.uidValidity) continue;
+			for (const seen of [true, false]) {
+				const these = group.messages.filter((message) => message.seenPending === seen);
+				if (these.length === 0) continue;
+				for (const part of chunked(these.map((message) => message.uid))) {
+					await writer.setFlags(part, seen ? [FLAG_SEEN] : [], seen ? [] : [FLAG_SEEN]);
+				}
+				const ids = these.map((message) => message.id);
+				for (let i = 0; i < ids.length; i += ID_CHUNK) {
+					db.update(mailMessages)
+						.set({ seenPending: null })
+						.where(and(inArray(mailMessages.id, ids.slice(i, i + ID_CHUNK)), eq(mailMessages.seenPending, seen)))
+						.run();
+				}
+				pushed += these.length;
+			}
+		}
+	});
+	return pushed;
 }
 
 /** Flags or unflags messages, on the server and here. */

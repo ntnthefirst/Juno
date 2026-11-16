@@ -10,11 +10,17 @@ import { useRemotePictures } from "../../lib/remote-pictures";
 import { contextMenuFor } from "../../lib/native-menu";
 import { useCanvasFonts } from "../templates/mail/canvas/use-canvas-fonts";
 import { UseMailTemplateScreen } from "../templates/UseMailTemplateScreen";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type StyledMailPaneProps = {
 	onClose: () => void;
 	/** A message was queued from a template. */
 	onSent: () => void;
+	/**
+	 * False while the composer is open and on top of this column, so one press
+	 * of Escape closes one thing.
+	 */
+	escapeCloses?: boolean;
 };
 
 type Rendered = { templateId: string; subject: string; html: string } | { templateId: string; error: string };
@@ -34,7 +40,7 @@ const ICON_BUTTON =
  * narrows back again. Writing and changing templates is still the styled mail
  * screen, one press away.
  */
-export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
+export function StyledMailPane({ onClose, onSent, escapeCloses = true }: StyledMailPaneProps) {
 	const [templates, setTemplates] = useState<MailTemplate[] | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
@@ -63,14 +69,15 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 
 	// Escape steps back out of sending first, then closes the column.
 	useEffect(() => {
+		if (!escapeCloses) return;
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || document.querySelector("[role='dialog'], [role='menu']")) return;
+			if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("[role='dialog'], [role='menu']")) return;
 			if (usingId) setUsingId(null);
 			else onClose();
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [usingId, onClose]);
+	}, [usingId, onClose, escapeCloses]);
 
 	const needle = search.trim().toLowerCase();
 	const shown = useMemo(
@@ -144,7 +151,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 	return (
 		<aside
 			aria-label="Styled mail"
-			className="animate-slide flex h-full min-h-0 flex-none flex-col border-l border-[var(--line)] bg-[var(--surface)] transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth)]"
+			className="animate-slide flex h-full min-h-0 flex-none flex-col border-l border-[var(--line)] bg-[var(--surface)]"
 			style={{ width: wide ? "min(760px, 62%)" : "360px" }}
 		>
 			{using ? (
@@ -203,7 +210,7 @@ export function StyledMailPane({ onClose, onSent }: StyledMailPaneProps) {
 								{loadError}
 							</li>
 						) : templates === null ? (
-							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">Loading.</li>
+							<li><RowsSkeleton rows={4} divided={false} trailing={false} /></li>
 						) : shown.length === 0 ? (
 							<li className="px-2 py-2 text-sm text-[var(--ink-muted)]">
 								{needle ? "Nothing matches." : "No styled mail yet. Make one in Styled mail."}

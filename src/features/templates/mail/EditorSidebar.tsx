@@ -25,8 +25,6 @@ type EditorSidebarProps = {
 	onStep: (id: string, by: -1 | 1) => void;
 	/** Swaps the whole canvas for hand-written HTML, and back. Null where a canvas is all there is. */
 	onConvert: (() => void) | null;
-	/** Adds a page at the end, for a document. Null for a mail template. */
-	onAddPage: (() => void) | null;
 
 	unreviewed: boolean;
 
@@ -68,7 +66,6 @@ export function EditorSidebar({
 	onDrop,
 	onStep,
 	onConvert,
-	onAddPage,
 	unreviewed,
 	autosave,
 	onAutosave,
@@ -157,16 +154,6 @@ export function EditorSidebar({
 					<h2 className="text-overline text-[var(--ink-muted)] uppercase">
 						Layers
 					</h2>
-					{onAddPage ? (
-						<button
-							type="button"
-							onClick={onAddPage}
-							title="Add a page at the end"
-							className="ml-auto flex h-[24px] items-center gap-1 rounded-[var(--radius-sm)] px-1.5 text-micro text-[var(--ink-muted)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
-						>
-							<Icon name="add" size={12} /> Add page
-						</button>
-					) : null}
 				</div>
 				<div className="relative min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
 					{layout ? (

@@ -7,7 +7,8 @@
  */
 import { BrowserWindow } from "electron";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { documentShell } from "./document-style";
 
@@ -90,8 +91,19 @@ export async function printPdf(options: Omit<RenderOptions, "fileName">): Promis
 		},
 	});
 
+	// A data: address has a length limit in Chromium of about two megabytes, and
+	// a converted Word file or a picture inline passes it easily. Past a safe
+	// size the page is written to a file of its own and loaded from there.
+	const viaFile = html.length > 1_500_000;
+	const folder = viaFile ? mkdtempSync(join(tmpdir(), "juno-print-")) : null;
 	try {
-		await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+		if (folder) {
+			const page = join(folder, "page.html");
+			writeFileSync(page, html, "utf8");
+			await window.loadFile(page);
+		} else {
+			await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+		}
 		// loadURL resolves on did-finish-load, but layout with a just-decoded font
 		// settles a frame later. Without this the first page can print in the
 		// fallback face.
@@ -111,6 +123,7 @@ export async function printPdf(options: Omit<RenderOptions, "fileName">): Promis
 		// An offscreen window that is never closed leaks a renderer process, and
 		// generating a few documents in a row would leave several running.
 		if (!window.isDestroyed()) window.destroy();
+		if (folder) rmSync(folder, { recursive: true, force: true });
 	}
 }
 

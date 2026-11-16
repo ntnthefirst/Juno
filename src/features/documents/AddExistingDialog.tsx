@@ -19,7 +19,7 @@ type AddExistingDialogProps = {
 
 /**
  * Puts a document that already exists under this client or project, so a
- * contract imported from the Documents screen or kept from a mail does not
+ * contract kept from a mail, or listed under another record, does not
  * have to be opened to be filed. Pick one, then say yes; it is a move, so the
  * question says where it is kept now.
  *
@@ -122,9 +122,9 @@ export function AddExistingDialog({ scope, name, onClose, onAdded }: AddExisting
 				<DocumentSearchList
 					documents={documents}
 					search={search}
-					// Documents kept under nothing are the likeliest to belong here.
+					// Your own files, kept under nothing, are the likeliest to belong here.
 					nearby={(record) => record.clientId === null && record.projectId === null}
-					nearbyLabel="Not linked yet"
+					nearbyLabel="In Files"
 					onPick={setChosen}
 					emptyText="Every document is already here."
 				/>

@@ -2,10 +2,13 @@ import { useState } from "react";
 import type { Reminder } from "@shared/types";
 import { Checkbox } from "../../components/Checkbox";
 import { ActionMenu } from "../../components/ActionMenu";
+import { RecordLink } from "../../components/RecordLink";
 import { messageOf } from "../../lib/errors";
+import { requestOpenClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 import { prefersReducedMotion } from "../../lib/motion";
 import { contextMenuFor, type MenuHandlers } from "../../lib/native-menu";
-import { describeDue, formatDate } from "./format";
+import { describeDue, describeSnoozedUntil, formatDate } from "./format";
 
 type ReminderRowProps = {
 	reminder: Reminder;
@@ -50,16 +53,21 @@ export function ReminderRow({
 }: ReminderRowProps) {
 	const [busy, setBusy] = useState(false);
 	// Set the moment a reminder is ticked, so the row folds away while the write happens.
-	const [leaving, setLeaving] = useState(false);
+	// It holds the row as it was read, so the fold lasts until the list has been read
+	// again rather than springing back open in the moment between the write and the read.
+	const [leftFrom, setLeftFrom] = useState<Reminder | null>(null);
+	const leaving = leftFrom === reminder;
 
-	async function run(work: () => Promise<unknown>) {
-		if (busy) return;
+	async function run(work: () => Promise<unknown>): Promise<boolean> {
+		if (busy) return false;
 		setBusy(true);
 		try {
 			await work();
 			onChanged();
+			return true;
 		} catch (cause: unknown) {
 			onError(messageOf(cause));
+			return false;
 		} finally {
 			setBusy(false);
 		}
@@ -80,16 +88,21 @@ export function ReminderRow({
 	}
 
 	const belongsTo = [reminder.clientName, reminder.projectName].filter(Boolean).join(" / ");
+	// Each name in the meta line opens its own record.
+	const client = reminder.clientId && reminder.clientName ? { id: reminder.clientId, name: reminder.clientName } : null;
+	const project =
+		reminder.projectId && reminder.projectName ? { id: reminder.projectId, name: reminder.projectName } : null;
 	const meta = [belongsTo, reminder.recurrenceLabel].filter(Boolean).join(" · ");
 	const done = reminder.bucket === "done";
 	const overdue = reminder.bucket === "overdue";
+	// A snoozed row says when it comes back, since its due date has usually passed.
+	const snoozedUntil = reminder.bucket === "snoozed" ? reminder.snoozedUntil : null;
 	async function complete() {
 		if (busy || leaving) return;
-		setLeaving(true);
+		setLeftFrom(reminder);
 		// Long enough for the fold to be seen, and none at all when the system asks for less movement.
 		await new Promise((resolve) => setTimeout(resolve, prefersReducedMotion() ? 0 : 280));
-		await run(() => window.juno.reminders.complete(reminder.id));
-		setLeaving(false);
+		if (!(await run(() => window.juno.reminders.complete(reminder.id, null, reminder.dueOn)))) setLeftFrom(null);
 	}
 	const toggle = () => (done ? void run(() => window.juno.reminders.reopen(reminder.id)) : void complete());
 
@@ -135,13 +148,33 @@ export function ReminderRow({
 					</span>
 
 					<div className={agenda ? "min-w-0 flex-1" : "min-w-0 flex-1 py-2 pl-1"}>
-						<p
-							className={`truncate text-base ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
+						<button
+							type="button"
+							onClick={() => onEdit(reminder)}
+							className={`block max-w-full truncate rounded-[var(--radius-sm)] text-left text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${done ? "text-[var(--ink-muted)] line-through" : ""}`}
 						>
 							{reminder.title}
-						</p>
+						</button>
 						{meta ? (
-							<p className="truncate text-sm text-[var(--ink-muted)]">{meta}</p>
+							<p className="truncate text-sm text-[var(--ink-muted)]">
+								{client ? (
+									<RecordLink tone="quiet" onOpen={() => requestOpenClient(client.id, client.name)}>
+										{client.name}
+									</RecordLink>
+								) : (
+									reminder.clientName
+								)}
+								{reminder.clientName && reminder.projectName ? " / " : null}
+								{project ? (
+									<RecordLink tone="quiet" onOpen={() => requestOpen({ kind: "project", ...project })}>
+										{project.name}
+									</RecordLink>
+								) : (
+									reminder.projectName
+								)}
+								{belongsTo && reminder.recurrenceLabel ? " · " : null}
+								{reminder.recurrenceLabel}
+							</p>
 						) : null}
 					</div>
 
@@ -153,10 +186,12 @@ export function ReminderRow({
 					>
 						{agenda && trailing !== undefined
 							? trailing
-							: today
-								? describeDue(reminder.dueOn, today)
-								: formatDate(reminder.dueOn)}
-						{agenda && trailing !== undefined ? null : reminder.dueTime ? `, ${reminder.dueTime}` : null}
+							: snoozedUntil && today
+								? describeSnoozedUntil(snoozedUntil, today)
+								: today
+									? describeDue(reminder.dueOn, today)
+									: formatDate(reminder.dueOn)}
+						{(agenda && trailing !== undefined) || snoozedUntil ? null : reminder.dueTime ? `, ${reminder.dueTime}` : null}
 					</span>
 
 					<span className={`${agenda ? "absolute right-0 top-1/2 -translate-y-1/2 bg-surface" : ""} flex-none opacity-0 transition-opacity duration-[var(--duration-fast)] group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100`}>

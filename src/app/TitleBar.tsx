@@ -9,9 +9,11 @@ import { RecentMenu } from "./RecentMenu";
 import { RemindersMenu } from "./RemindersMenu";
 import { TimerPill } from "./TimerPill";
 import type { ScreenAction } from "../lib/screen-actions";
-import { NEW_AT_RIGHT, NEW_MENU, NEW_ON, NEW_OWN_ICON, type NewMenuEntry, type ScreenId } from "./screens";
+import { NEW_AT_RIGHT, NEW_MENU, NEW_MENUS, NEW_ON, NEW_OWN_ICON, type NewMenuEntry, type ScreenId } from "./screens";
 
 type TitleBarProps = {
+	/** A document is open over the screen: the text New goes and the plus comes back at the left. */
+	documentOpen: boolean;
 	/**
 	 * Where back goes, when a record is open over its list: the name of that list
 	 * and the way there. Null at the top of a screen, where there is nowhere to go.
@@ -107,6 +109,7 @@ export function TitleBar({
 	back,
 	title,
 	screen,
+	documentOpen,
 	onOpenPalette,
 	recentOpen,
 	onRecentOpenChange,
@@ -153,11 +156,13 @@ export function TitleBar({
 
 	const here = NEW_ON[screen];
 	// New is a text button at the right of every screen. Where the screen makes one
-	// kind of record it makes that at once, and elsewhere it opens the New menu.
-	const newDirect = here !== undefined && NEW_AT_RIGHT.includes(screen) ? here : null;
+	// kind of record it makes that at once; a screen that starts several things has
+	// a menu of its own, and anywhere else New opens the whole menu.
+	const ownMenu = NEW_MENUS[screen];
+	const newDirect = !ownMenu && here !== undefined && NEW_AT_RIGHT.includes(screen) ? here : null;
 	// With a document open the text New goes, as the design draws it, and the plus
 	// comes back at the left, which is where a page frame has it.
-	const openDocument = screen === "documents" && back !== null;
+	const openDocument = documentOpen;
 
 	// What Ctrl N makes on the screen in view carries that shortcut. When the design's
 	// list has no entry for it (a message, a document, a reminder) the screen adds
@@ -166,17 +171,13 @@ export function TitleBar({
 		here && !NEW_MENU.some((entry) => entry.label === here.label)
 			? [{ screen: here.screen, label: here.label, icon: NEW_OWN_ICON[here.label] ?? "add" }]
 			: [];
-	const newItems: MenuItem[] = [...own, ...NEW_MENU].map((entry) => ({
+	const entries = ownMenu ?? [...own, ...NEW_MENU];
+	const newItems: MenuItem[] = entries.map((entry) => ({
 		id: entry.label,
 		label: entry.label,
 		icon: entry.icon,
 		separatorBefore: entry.separatorBefore,
-		hint:
-			entry.action === "new-page"
-				? formatCombo(COMBOS.newPage).join(" ")
-				: entry.screen === here?.screen && entry.label === here.label
-					? formatCombo(COMBOS.newItem).join(" ")
-					: undefined,
+		hint: entry.screen === here?.screen && entry.label === here.label ? formatCombo(COMBOS.newItem).join(" ") : undefined,
 		onSelect: () => onNew(entry.screen, entry.action),
 	}));
 

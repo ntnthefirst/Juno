@@ -15,7 +15,9 @@ import { getDb, type Db } from "../db";
 import { now } from "../db/columns";
 import { documents } from "../db/schema";
 import { resolveOwner } from "./document-owner";
+import { resolvePlace } from "./document-place";
 import * as docs from "./documents";
+import * as pictures from "./page-images";
 
 const MAX_TITLE = 300;
 
@@ -58,7 +60,7 @@ export async function create(input: PageInput = {}, db: Db = getDb()): Promise<P
 	const title = input.title === undefined ? "Untitled page" : cleanTitle(input.title) || "Untitled page";
 	const blocks = input.blocks === undefined ? emptyBlocks() : cleanBlocks(input.blocks);
 	checkImages(blocks, null);
-	const owner = resolveOwner(input, db);
+	const owner = resolvePlace(input, db);
 	const stamp = now();
 	const row = db
 		.insert(documents)
@@ -91,6 +93,35 @@ export async function get(id: string, db: Db = getDb()): Promise<PageDetail> {
 }
 
 /** Fields left out are untouched. Saved as it is typed, so there is no draft. */
+/**
+ * A copy of a page, kept in a place: its title and its blocks, with every
+ * picture copied into the new page's own folder, so the two never share a
+ * file and deleting one leaves the other whole. A picture whose file has gone
+ * is left out of the copy rather than pointing at the page it came from.
+ */
+export async function copyPage(
+	id: string,
+	place: { clientId: string | null; projectId: string | null },
+	title: string,
+	db: Db = getDb(),
+): Promise<PageDetail> {
+	const source = await get(id, db);
+	const made = await create({ title, clientId: place.clientId, projectId: place.projectId }, db);
+	const blocks: Block[] = [];
+	for (const block of source.blocks) {
+		if (block.type !== "image") {
+			blocks.push(block);
+			continue;
+		}
+		const data = pictures.read(block.path);
+		if (!data) continue;
+		const extension = block.path.slice(block.path.lastIndexOf("."));
+		const stored = pictures.store(made.document.id, { fileName: `${block.alt || "picture"}${extension}`, data }, db);
+		blocks.push({ ...block, path: stored.path });
+	}
+	return update(made.document.id, { blocks }, db);
+}
+
 export async function update(id: string, patch: PagePatch, db: Db = getDb()): Promise<PageDetail> {
 	const current = await get(id, db);
 	const set: Partial<typeof documents.$inferInsert> = { updatedAt: now() };

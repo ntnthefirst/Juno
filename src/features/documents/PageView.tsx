@@ -7,6 +7,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { FindBar } from "../../components/FindBar";
 import { MenuButton } from "../../components/Menu";
+import { SkeletonBar } from "../../components/SkeletonBar";
 import { messageOf } from "../../lib/errors";
 import { COMBOS, matchesCombo } from "../../lib/shortcuts";
 import { editedLabel } from "../notes/note-format";
@@ -50,7 +51,18 @@ export function PageView({ pageId, onDeleted, onChanged, onTitleChange }: PageVi
 		};
 	}, [pageId]);
 
-	if (load.status === "loading") return <p className="p-8 text-[var(--ink-muted)]">Loading.</p>;
+	if (load.status === "loading") {
+		return (
+			<div className="mx-auto flex w-full max-w-[760px] flex-col gap-3 px-8 pt-10" role="status" aria-label="Loading the page" aria-busy="true">
+				<SkeletonBar width="45%" size="h2" />
+				<SkeletonBar width="20%" size="micro" />
+				<span className="h-4" />
+				<SkeletonBar width="100%" />
+				<SkeletonBar width="88%" />
+				<SkeletonBar width="94%" />
+			</div>
+		);
+	}
 	if (load.status === "error") {
 		return (
 			<div className="m-8 border-l-2 border-[var(--risk)] pl-4">

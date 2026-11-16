@@ -1,3 +1,5 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { beforeEach, describe, expect, it } from "vitest";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5,14 +7,22 @@ import { MENU_ICONS, parseMenuRequest, type MenuKind, type MenuRequest } from ".
 import { createDrizzle, type Db } from "../db";
 import { runMigrations } from "../db/migrate";
 import { openDatabase } from "../db/node-sqlite-shim";
+import { mailAttachments, mailFolders, mailMessages, mailThreads } from "../db/schema";
 import * as calendar from "./calendar";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
+import { configureClipboard, memoryClipboard } from "./clipboard";
+import { importFile } from "./document-import";
+import { configureDocumentStorage } from "./documents";
+import * as accounts from "./mail-accounts";
+import { configureCredentialStore, MemoryCredentialStore } from "./mail-credentials";
+import { configureMailThreads } from "./mail-threads";
 import * as notes from "./notes";
 import * as pages from "./pages";
 import { entriesFor } from "./menu-registry";
 import * as projects from "./projects";
 import * as reminders from "./reminders";
+import { configureSettings } from "./settings";
 
 const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
@@ -135,13 +145,67 @@ describe("note menu", () => {
 		expect(await ask("note", note.id)).toEqual([]);
 	});
 
-	it("takes Open in the default app off a page, which has no file", async () => {
+	it("gives a page only what a page can do, since it has no file", async () => {
+		configureClipboard(memoryClipboard());
 		const page = await pages.create({}, db);
-		expect(ids(await ask("file", page.document.id))).toEqual(["open", "delete"]);
+		expect(ids(await ask("file", page.document.id))).toEqual(["open", "copy", "duplicate", "rename", "copy-to", "move-to", "delete"]);
 	});
 
-	it("starts the Notes blank menu with a note and a page", async () => {
-		expect(ids(await ask("blank", "notes")).slice(0, 3)).toEqual(["new-note", "new-page", "new-event"]);
+	it("starts the Notes blank menu with a note, and leaves pages to a Documents tab", async () => {
+		expect(ids(await ask("blank", "notes")).slice(0, 2)).toEqual(["new-note", "new-event"]);
+	});
+});
+
+describe("documents explorer menus", () => {
+	const bytes = (text: string) => new TextEncoder().encode(text);
+
+	beforeEach(() => {
+		configureDocumentStorage(mkdtempSync(join(tmpdir(), "juno-menu-storage-")));
+	});
+
+	it("offers a file what an explorer does, then Convert and sign for a file that is not a PDF", async () => {
+		configureClipboard(memoryClipboard({ text: "iets" }));
+		const record = await importFile({ source: { kind: "bytes", fileName: "Notes.txt", data: bytes("Prijs per meter") } }, db);
+		expect(ids(await ask("file", record.id))).toEqual([
+			"open-in-default-app",
+			"preview",
+			"copy",
+			"paste",
+			"duplicate",
+			"rename",
+			"copy-to",
+			"move-to",
+			"convert-pdf",
+			"sign",
+			"download-file",
+			"send-file",
+			"delete",
+		]);
+		const glyphs = Object.fromEntries((await ask("file", record.id)).map((entry) => [entry.id, entry.icon]));
+		expect(glyphs).toMatchObject({ "open-in-default-app": "external", preview: "panel", copy: "copy", paste: "import", rename: "edit", delete: "remove" });
+		const sign = (await ask("file", record.id)).find((entry) => entry.id === "sign");
+		expect(sign?.label).toBe("Convert and sign");
+	});
+
+	it("leaves Convert to PDF off a PDF", async () => {
+		const pdf = bytes("%PDF-1.4\n1 0 obj\n<< >>\nendobj\n%%EOF");
+		const record = await importFile({ source: { kind: "bytes", fileName: "Offerte.pdf", data: pdf } }, db);
+		const entries = ids(await ask("file", record.id));
+		expect(entries).not.toContain("convert-pdf");
+		expect(entries).toContain("sign");
+	});
+
+	it("offers only what applies to several files when several are selected", async () => {
+		configureClipboard(memoryClipboard());
+		const record = await importFile({ source: { kind: "bytes", fileName: "Een.txt", data: bytes("1") } }, db);
+		expect(ids(await ask("file", record.id, "several"))).toEqual(["copy", "duplicate", "copy-to", "move-to", "delete"]);
+	});
+
+	it("gives a Documents tab's empty space Paste, New page and Add files, and Paste only with something to paste", async () => {
+		configureClipboard(memoryClipboard());
+		expect(ids(await ask("blank", "documents"))).toEqual(["new-page", "add-files"]);
+		configureClipboard(memoryClipboard({ text: "iets" }));
+		expect(ids(await ask("blank", "documents"))).toEqual(["paste", "new-page", "add-files"]);
 	});
 });
 
@@ -158,6 +222,88 @@ describe("blank menu", () => {
 
 	it("offers nothing for an area that does not exist", async () => {
 		expect(await ask("blank", "elsewhere")).toEqual([]);
+	});
+});
+
+describe("attachment menu", () => {
+	async function conversation(link: { clientId?: string; projectId?: string }) {
+		configureSettings(mkdtempSync(join(tmpdir(), "juno-menu-settings-")));
+		configureCredentialStore(new MemoryCredentialStore());
+		configureDocumentStorage(mkdtempSync(join(tmpdir(), "juno-menu-docs-")));
+		const mailDir = mkdtempSync(join(tmpdir(), "juno-menu-mail-"));
+		configureMailThreads(mailDir);
+		const at = "2026-11-04T09:00:00.000Z";
+		const accountId = (await accounts.create({ email: "hallo@juno.test", imapHost: "imap.juno.test", password: "x" }, db)).id;
+		const folderId = db.insert(mailFolders).values({ accountId, path: "INBOX", name: "INBOX" }).returning().get().id;
+		const threadId = db
+			.insert(mailThreads)
+			.values({ accountId, subject: "Stukken", subjectNorm: "stukken", firstMessageAt: at, lastMessageAt: at, ...link })
+			.returning()
+			.get().id;
+		const messageId = db
+			.insert(mailMessages)
+			.values({ accountId, folderId, threadId, uid: 1, subject: "Stukken", internalDate: at })
+			.returning()
+			.get().id;
+		const add = (id: string, filename: string, content: string) => {
+			writeFileSync(join(mailDir, id), content);
+			db.insert(mailAttachments)
+				.values({ id, messageId, filename, mimeType: "application/octet-stream", size: content.length, filePath: id })
+				.run();
+			return id;
+		};
+		return { add };
+	}
+
+	it("saves to the conversation's project in one click, with the picker and the rest one step away", async () => {
+		const project = await projects.create({ name: "Keuken" }, db);
+		const { add } = await conversation({ projectId: project.id });
+		const plan = add("att-plan", "Plan.pdf", "plan");
+		add("att-offer", "Offerte.pdf", "offerte");
+
+		const entries = await ask("attachment", plan);
+		expect(ids(entries)).toEqual([
+			"preview",
+			"open",
+			"save-as",
+			"save-to-place",
+			"save-to",
+			"save-all-to-place",
+			"add-to-project-files",
+		]);
+		expect(entries.find((entry) => entry.id === "save-to-place")?.label).toBe("Save to Keuken");
+		expect(entries.find((entry) => entry.id === "save-all-to-place")?.label).toBe("Save all to Keuken");
+		expect(ids(await ask("attachment", plan, "untrusted"))).not.toContain("open");
+	});
+
+	it("opens the document an attachment already is instead of saving it again", async () => {
+		const client = await clients.create({ name: "Peeters" }, db);
+		const { add } = await conversation({ clientId: client.id });
+		const plan = add("att-plan", "Plan.txt", "Grondplan, schaal 1 op 50.");
+		await importFile(
+			{ source: { kind: "bytes", fileName: "Plan.txt", data: new TextEncoder().encode("Grondplan, schaal 1 op 50.") }, clientId: client.id },
+			db,
+		);
+
+		const kept = ids(await ask("attachment", plan));
+		expect(kept).toContain("open-document");
+		expect(kept).not.toContain("save-to-place");
+		expect(kept).not.toContain("save-to");
+		expect(kept).not.toContain("add-to-project-files");
+	});
+
+	it("asks for a place when the conversation is filed under nothing", async () => {
+		const { add } = await conversation({});
+		const plan = add("att-plan", "Plan.pdf", "plan");
+		add("att-offer", "Offerte.pdf", "offerte");
+		const entries = ids(await ask("attachment", plan));
+		expect(entries).toContain("save-to");
+		expect(entries).not.toContain("save-to-place");
+		expect(entries).not.toContain("save-all-to-place");
+	});
+
+	it("offers nothing for an attachment that does not exist", async () => {
+		expect(await ask("attachment", "nope")).toEqual([]);
 	});
 });
 

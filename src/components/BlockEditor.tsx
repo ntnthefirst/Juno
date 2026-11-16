@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { newBlockId, plainText, safeLinkHref, sanitiseInline, type Block, type CheckBlock, type ImageBlock, type TableBlock, type TextBlock } from "@shared/blocks";
 import { ASSET_ORIGIN } from "@shared/types";
+import { messageOf } from "../lib/errors";
 import { Checkbox } from "./Checkbox";
 import { Icon, type IconName } from "./Icon";
 import { ContextMenu, type MenuItem } from "./Menu";
@@ -389,7 +390,7 @@ export function BlockEditor({ blocks, onChange, variant, containerRef, autoFocus
 	}
 
 	function report(cause: unknown): void {
-		onError?.(cause instanceof Error ? cause.message : String(cause));
+		onError?.(messageOf(cause));
 	}
 
 	/** Opens the link box on the words selected in a line, or on the link the caret is in. */

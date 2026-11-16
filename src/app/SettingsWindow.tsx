@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { AppInfo, SettingsSection } from "@shared/types";
+import type { AppInfo, SettingsSection, SettingsTarget } from "@shared/types";
 import { Toast } from "../components/Toast";
 import appIcon from "../assets/icon.png";
 import { AccountingSection } from "../features/settings/AccountingSection";
@@ -32,6 +32,7 @@ import { PairingDialog } from "../features/agent/PairingDialog";
 import { messageOf } from "../lib/errors";
 import { overlayGutter } from "../lib/platform";
 import { useTheme } from "../lib/theme";
+import { CardSkeleton } from "../components/CardSkeleton";
 
 type SettingsWindowProps = {
 	/**
@@ -39,6 +40,8 @@ type SettingsWindowProps = {
 	 * somebody opened settings rather than being sent to one part of it.
 	 */
 	initialSection: SettingsSection | null;
+	/** One step further on that tab, when a screen asked for it (the Add calendar page, a new rule). */
+	initialTarget: SettingsTarget | null;
 };
 
 /**
@@ -49,7 +52,7 @@ type SettingsWindowProps = {
  * subject, and the search above them. Nothing here is a long scroll, and the
  * search does not hide in the title bar.
  */
-export function SettingsWindow({ initialSection }: SettingsWindowProps) {
+export function SettingsWindow({ initialSection, initialTarget }: SettingsWindowProps) {
 	const [theme, setTheme] = useTheme();
 	const [page, setPage] = useState<SettingsPageId>(firstPageOf(initialSection ?? "general"));
 	const [toast, setToast] = useState<string | null>(null);
@@ -57,6 +60,11 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	const [active, setActive] = useState(0);
 	// The section a search result asked for, kept until the page has painted it.
 	const [jumpTo, setJumpTo] = useState<{ anchor: string; nonce: number } | null>(null);
+	// Where a screen sent this window inside its tab. The nonce lets the same target
+	// be asked for twice in a row and still be acted on.
+	const [target, setTarget] = useState<{ value: SettingsTarget; nonce: number } | null>(() =>
+		initialTarget ? { value: initialTarget, nonce: 1 } : null,
+	);
 	const main = useRef<HTMLElement>(null);
 	const searchField = useRef<HTMLInputElement>(null);
 	const resultsId = useId();
@@ -67,8 +75,12 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	// Escape closes a modal dialog, and this window is one.
 	useEffect(() => {
 		const onKey = (event: globalThis.KeyboardEvent) => {
-			// The search field takes its own Escape, to clear itself first.
-			if (event.key === "Escape" && !event.defaultPrevented) void window.juno.window.closeSettings();
+			// The search field takes its own Escape, to clear itself first, and a
+			// page opened inside a section (an account, a rule, a calendar) takes
+			// it to step back to the section rather than closing the window.
+			if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("[data-form-page]")) {
+				void window.juno.window.closeSettings();
+			}
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
 				event.preventDefault();
 				searchField.current?.focus();
@@ -151,9 +163,10 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 	// in the URL. Reloading instead would throw away a half-typed field.
 	useEffect(
 		() =>
-			window.juno.window.onShowSection((group) => {
+			window.juno.window.onShowSection((group, next) => {
 				setQuery("");
 				setPage(firstPageOf(group));
+				if (next) setTarget({ value: next, nonce: Date.now() });
 			}),
 		[],
 	);
@@ -205,7 +218,7 @@ export function SettingsWindow({ initialSection }: SettingsWindowProps) {
 					) : (
 						<SoloSectionContext.Provider value={current.solo}>
 							{page === "mail" ? (
-								<MailSection onSaved={setToast} page={current} />
+								<MailSection onSaved={setToast} page={current} target={target} />
 							) : (
 								<div className={PAGE_PADDING}>
 									<PageHeader page={current} />
@@ -325,14 +338,14 @@ function AboutSection() {
 			{error ? (
 				<p className="text-[var(--risk)]">{error}</p>
 			) : info === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={4} framed={false} />
 			) : (
 				<div className="flex flex-col gap-5">
-					<div className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+					<div className="flex items-center gap-4 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-4">
 						<img
 							src={appIcon}
 							alt="Juno"
-							className="h-14 w-14 object-contain filter drop-shadow-[0_2px_8px_rgba(91,79,225,0.2)] flex-none"
+							className="h-14 w-14 flex-none object-contain"
 						/>
 						<div className="min-w-0 flex-1">
 							<div className="flex items-baseline gap-2">

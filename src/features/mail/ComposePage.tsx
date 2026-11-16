@@ -11,7 +11,7 @@ import type {
 	ProjectAsset,
 } from "@shared/types";
 import { mimeTypeOf } from "@shared/mime";
-import { AttachmentIcon } from "../../components/AttachmentIcon";
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { DocumentSearchList } from "../../components/DocumentSearchList";
@@ -22,9 +22,11 @@ import { Notice } from "../../components/Notice";
 import { requestOpen } from "../../lib/open-entity";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
+import { attachedNameOf } from "../../lib/file-type";
 import { BlockMenu, type ManageTarget } from "./blocks/BlockMenu";
 import { squash } from "./blocks/block-text";
 import MessageEditor, { type MessageEditorHandle } from "./MessageEditor";
+import { ownDrop } from "../../lib/document-drag";
 import { useFileDrop } from "../../lib/use-file-drop";
 import { formatBytes } from "./format";
 import { RecipientField } from "./RecipientField";
@@ -58,6 +60,11 @@ type ComposePageProps = {
 	 * where the composer has no screen to go back to, and the menus then only pick.
 	 */
 	onManage?: (draft: MailOutboxMessage | null, target: ManageTarget) => void;
+	/**
+	 * False while something else on the screen that Escape also closes is on
+	 * top (the styled mail column), so one press closes one thing.
+	 */
+	escapeCloses?: boolean;
 };
 
 type BlockState = Record<ComposeBlockKind, string | null>;
@@ -70,7 +77,24 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
  * form; this reads as a blank message the way a mail client's own compose
  * window does, on any size of screen.
  */
-export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: ComposePageProps) {
+export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escapeCloses = true }: ComposePageProps) {
+	// The page replaces the list it was opened from, so the row that opened it is
+	// remembered by its id, read before any field here takes the focus, and
+	// focused again once the list is back.
+	const [openerRow] = useState(() => {
+		const active = document.activeElement;
+		return active instanceof HTMLElement ? (active.closest("[data-row-id]")?.getAttribute("data-row-id") ?? null) : null;
+	});
+	useEffect(() => {
+		if (!openerRow) return;
+		return () => {
+			window.requestAnimationFrame(() => {
+				const active = document.activeElement;
+				if (active !== null && active !== document.body) return;
+				document.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(openerRow)}"]`)?.focus({ preventScroll: true });
+			});
+		};
+	}, [openerRow]);
 	const [accounts, setAccounts] = useState<MailAccount[]>([]);
 	const [templates, setTemplates] = useState<MailTemplate[]>([]);
 	const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
@@ -497,6 +521,12 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 	}
 
 	async function attachDropped(dropped: File[]) {
+		// A document dragged here from Juno is attached as that document, newest version and all.
+		const own = ownDrop(dropped);
+		if (own) {
+			setDocumentIds((current) => [...current, ...own.filter((id) => !current.includes(id))]);
+			return;
+		}
 		if (attaching) return;
 		setAttaching(true);
 		setError(null);
@@ -560,7 +590,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 		}
 	}
 
-	const drop = useFileDrop((dropped) => void attachDropped(dropped));
+	const drop = useFileDrop((dropped) => void attachDropped(dropped), { acceptOwn: true });
 
 	async function handleSend() {
 		if (busy) return;
@@ -629,14 +659,16 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 	// The close button is gone; Escape is the way out, the same as it is on
 	// every other full-screen form in the app.
 	useEffect(() => {
+		if (!escapeCloses) return;
 		function onKey(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
+			// The recipient suggestions take their own Escape first.
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			if (document.querySelector("[role='dialog']")) return;
 			void handleClose();
 		}
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [handleClose]);
+	}, [handleClose, escapeCloses]);
 
 	const account = accounts.find((item) => item.id === accountId) ?? null;
 	const canSend = account !== null && account.smtpHost !== null;
@@ -656,17 +688,20 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 								? "Draft"
 								: "";
 
-	const nearbyLabel = clientId
-		? (documents?.find((record) => record.clientId === clientId)?.clientName ?? "This client")
-		: projectId
-			? (documents?.find((record) => record.projectId === projectId)?.projectName ?? "This project")
+	// A message filed under a project lists that project's documents first, the
+	// job being narrower than the client; otherwise the client's.
+	const nearbyLabel = projectId
+		? (documents?.find((record) => record.projectId === projectId)?.projectName ?? projectFiles?.name ?? "This project")
+		: clientId
+			? (documents?.find((record) => record.clientId === clientId)?.clientName ?? "This client")
 			: undefined;
+	const isNearby = (record: DocumentRecord) => (projectId ? record.projectId === projectId : record.clientId === clientId);
 	const attachedDocuments = documentIds.map((id) => {
 		const record = documents?.find((item) => item.id === id);
 		const kept = savedMessage?.attachments.find((item) => item.documentId === id);
 		return {
 			id,
-			name: record ? `${record.title}.pdf` : (kept?.filename ?? "Document"),
+			name: record ? attachedNameOf(record) : (kept?.filename ?? "Document"),
 			isSpecimen: record?.isSpecimen ?? false,
 		};
 	});
@@ -823,11 +858,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 											documents={documents}
 											search={documentSearch}
 											{...(nearbyLabel
-												? {
-														nearby: (record: DocumentRecord) =>
-															clientId ? record.clientId === clientId : record.projectId === projectId,
-														nearbyLabel,
-													}
+												? { nearby: isNearby, nearbyLabel }
 												: {})}
 											checked={documentIds}
 											onPick={(record) =>
@@ -856,7 +887,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 																	className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 text-left hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-default disabled:hover:bg-transparent"
 																	style={{ height: "var(--row-height)" }}
 																>
-																	<AttachmentIcon filename={asset.fileName} mimeType={asset.mimeType ?? mimeTypeOf(asset.fileName)} />
+																	<FileTypeIcon filename={asset.fileName} mimeType={asset.mimeType ?? mimeTypeOf(asset.fileName)} />
 																	<span className="min-w-0 flex-1 truncate text-dense">{asset.fileName}</span>
 																	{attached ? (
 																		<span className="shrink-0 text-micro text-[var(--ink-muted)]">Attached</span>
@@ -897,7 +928,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 									className="flex items-center gap-3 border-b border-[var(--line)] px-2"
 									style={{ height: "var(--row-height)" }}
 								>
-									<AttachmentIcon filename={attached.name} mimeType={mimeTypeOf(attached.name)} />
+									<FileTypeIcon filename={attached.name} mimeType={mimeTypeOf(attached.name)} />
 									<span className="min-w-0 flex-1 truncate text-dense">{attached.name}</span>
 									{attached.isSpecimen ? (
 										<span className="shrink-0 text-micro text-[var(--risk)]">specimen</span>
@@ -916,7 +947,7 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage }: Comp
 									className="flex items-center gap-3 border-b border-[var(--line)] px-2"
 									style={{ height: "var(--row-height)" }}
 								>
-									<AttachmentIcon filename={file.fileName} mimeType={file.mimeType} />
+									<FileTypeIcon filename={file.fileName} mimeType={file.mimeType} />
 									<span className="min-w-0 flex-1 truncate text-dense">{file.fileName}</span>
 									<span className="tabular shrink-0 text-micro text-[var(--ink-muted)]">
 										{formatBytes(file.byteSize)}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Activity, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LockState } from "@shared/types";
 import { installMenuIcons } from "../lib/menu-icons";
 import { LockScreen } from "../components/LockScreen";
@@ -7,19 +7,21 @@ import { AgentNotices } from "../features/agent/AgentNotices";
 import { AgentScreen } from "../features/agent/AgentScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { ClientsScreen } from "../features/clients/ClientsScreen";
-import { DocumentsScreen } from "../features/documents/DocumentsScreen";
+import { DocumentCover } from "../features/documents/DocumentCover";
 import { MailScreen } from "../features/mail/MailScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { Walkthrough } from "../features/onboarding/Walkthrough";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { RemindersScreen } from "../features/reminders/RemindersScreen";
-import { DocumentTemplatesScreen } from "../features/templates/DocumentTemplatesScreen";
 import { MailTemplatesScreen } from "../features/templates/MailTemplatesScreen";
 import { OverviewScreen } from "../features/overview/OverviewScreen";
+import { FilesScreen } from "../features/files/FilesScreen";
 import { onOpenClientRequest } from "../lib/open-client";
 import { offerDraft } from "../lib/open-draft";
-import { currentRequest, onOpenRequest, requestOpen } from "../lib/open-entity";
+import { currentRequest, onOpenRequest, requestOpen, screenFor } from "../lib/open-entity";
 import { announceRecordsChanged } from "../lib/new-record";
+import { ContentHostContext } from "../lib/content-host";
+import { coverOrigin, focusToReturn, markScroll, restoreScroll, type CameFrom } from "../lib/return-to";
 import { currentScreenAction, onScreenActionRequest, requestScreenAction, type ScreenAction } from "../lib/screen-actions";
 import { useThemeSync } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
@@ -30,7 +32,7 @@ import { NEW_ON, SCREEN_LABELS, SIDEBAR_ENTRY, type ScreenId } from "./screens";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
-import { TitleBarSlotContext } from "./titlebar-slot-context";
+import { TitleBarSlotContext, type TitleBarSlots } from "./titlebar-slot-context";
 import { useShortcuts } from "./use-shortcuts";
 
 export function App() {
@@ -157,8 +159,33 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			setNewHidden((count) => count - 1);
 		};
 	}, []);
+	// The sheet the screen is drawn on, for what covers the content area and nothing else.
+	const [contentHost, setContentHost] = useState<HTMLElement | null>(null);
 	const [recentOpen, setRecentOpen] = useState(false);
 	const [agentPending, setAgentPending] = useState(0);
+	// A document asked for from another screen is drawn over it, with that
+	// screen kept underneath, so closing the preview goes back to the same tab,
+	// scroll and row. `visit` mounts the cover fresh for each request. The
+	// sidebar and New still belong to the screen underneath.
+	const [cover, setCover] = useState<(CameFrom<HTMLElement> & { visit: number; documentId: string }) | null>(null);
+	const [coverHost, setCoverHost] = useState<HTMLElement | null>(null);
+	const shown: ScreenId = cover ? cover.screen : screen;
+	const coverRef = useRef(cover);
+	const hostRef = useRef(contentHost);
+	useEffect(() => {
+		coverRef.current = cover;
+		hostRef.current = contentHost;
+	});
+	// The last element focused on the screen, for a request made from the palette or a menu.
+	const lastFocus = useRef<HTMLElement | null>(null);
+	useEffect(() => {
+		if (!contentHost) return;
+		const note = (event: FocusEvent) => {
+			if (event.target instanceof HTMLElement) lastFocus.current = event.target;
+		};
+		contentHost.addEventListener("focusin", note);
+		return () => contentHost.removeEventListener("focusin", note);
+	}, [contentHost]);
 
 	// The moment the application itself is on screen, for the smoke run's
 	// start-up timings. A mark costs nothing and is never read otherwise.
@@ -178,9 +205,27 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	}, []);
 
 	const navigate = (id: ScreenId) => {
-		if (id === screen) setVisit((count) => count + 1);
+		if (id === screen || cover) setVisit((count) => count + 1);
+		setCover(null);
 		setScreen(id);
 	};
+
+	// What the screen under a preview needs put back once it shows again.
+	const returning = useRef<CameFrom<HTMLElement> | null>(null);
+	const returnFromCover = useCallback(() => {
+		returning.current = coverRef.current;
+		setCover(null);
+	}, []);
+	useLayoutEffect(() => {
+		const from = returning.current;
+		if (cover || !from) return;
+		returning.current = null;
+		restoreScroll(from.scroll);
+		// After the screen's own effects, which come back with it and may move the focus.
+		window.requestAnimationFrame(() => {
+			if (from.focus?.isConnected) from.focus.focus({ preventScroll: true });
+		});
+	}, [cover]);
 
 	// A record is open over its list when the trail has more than one step. Back
 	// is the step before the last, which is the one that knows how to return.
@@ -192,7 +237,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 	// and opens the form once it has mounted.
 	const startNew = (target: ScreenId, action: ScreenAction = "new") => requestScreenAction(target, action);
 	const newHere = () => {
-		const target = NEW_ON[screen];
+		const target = NEW_ON[shown];
 		if (target) startNew(target.screen);
 	};
 
@@ -202,7 +247,6 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 		reminders: () => navigate("reminders"),
 		goTo: navigate,
 		newItem: newHere,
-		newPage: () => startNew("documents", "new-page"),
 		settings: () => void window.juno.window.openSettings(),
 		back: () => back?.onSelect(),
 		lock: lock.configured ? () => void window.juno.lock.lock() : null,
@@ -217,6 +261,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 				const request = currentScreenAction();
 				if (!request) return;
 				setVisit((count) => count + 1);
+				setCover(null);
 				setScreen(request.screen);
 			}),
 		[],
@@ -229,32 +274,52 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 			onOpenClientRequest(() => {
 				// Remounts the clients screen when it is already open, so it re-reads the request.
 				setVisit((count) => count + 1);
+				setCover(null);
 				setScreen("clients");
 			}),
 		[],
 	);
 
-	// A link in the Agent tab. The screen it names is brought up fresh, and reads
-	// the request when it mounts.
+	// The screen on show, for a request that has to know where it lands.
+	const screenRef = useRef(shown);
+	const trailRef = useRef(trail);
+	useEffect(() => {
+		screenRef.current = shown;
+		trailRef.current = trail;
+	});
+
+	// A link to a record. The screen it names is brought up fresh, and reads the
+	// request when it mounts. A new message asked for from Mail itself is the
+	// exception: Mail opens the composer where it is, so the conversation being
+	// read is still there to come back to.
 	useEffect(
 		() =>
 			onOpenRequest(() => {
 				const target = currentRequest();
 				if (!target) return;
-				const next: ScreenId =
-					target.kind === "project"
-						? "projects"
-						: target.kind === "document"
-							? "documents"
-							: target.kind === "note"
-								? "notes"
-							: target.kind === "thread"
-								? "mail"
-								: target.kind === "mail-template"
-									? "mail-templates"
-									: target.screen;
+				if (target.kind === "compose" && screenRef.current === "mail") return;
+				// Another document from inside a preview keeps the screen the first came from.
+				if (target.kind === "document" && coverRef.current) {
+					setCover((current) => (current ? { ...current, visit: current.visit + 1, documentId: target.id } : current));
+					return;
+				}
+				const origin = coverOrigin(target, screenRef.current);
+				const host = hostRef.current;
+				if (origin && host && target.kind === "document") {
+					const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+					setCover({
+						visit: 0,
+						documentId: target.id,
+						screen: origin,
+						label: trailRef.current[trailRef.current.length - 1]?.label || SCREEN_LABELS[origin],
+						focus: focusToReturn(active, lastFocus.current, (element) => host.contains(element)),
+						scroll: markScroll([host, ...host.querySelectorAll<HTMLElement>("*")]),
+					});
+					return;
+				}
+				setCover(null);
 				setVisit((count) => count + 1);
-				setScreen(next);
+				setScreen(screenFor(target));
 			}),
 		[],
 	);
@@ -289,6 +354,7 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 		() =>
 			window.juno.mail.outbox.onAgentDraft((draft) => {
 				offerDraft(draft);
+				setCover(null);
 				setScreen("mail");
 			}),
 		[],
@@ -296,18 +362,20 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 	return (
 		<TitleBarSlotContext.Provider value={{ left: slot, right: rightSlot, overflow: overflowSlot, hideNew }}>
+			<ContentHostContext.Provider value={cover ? coverHost : contentHost}>
 			<div className="flex h-full flex-col bg-[var(--paper)]">
 				<TitleBar
 					back={back}
-					title={trail[trail.length - 1]?.label ?? (screen === "calendar" ? "" : SCREEN_LABELS[screen])}
-					screen={screen}
+					title={trail[trail.length - 1]?.label ?? (shown === "calendar" ? "" : SCREEN_LABELS[shown])}
+					screen={shown}
+					documentOpen={cover !== null}
 					onOpenPalette={() => setPaletteOpen(true)}
 					recentOpen={recentOpen}
 					onRecentOpenChange={setRecentOpen}
-					remindersActive={screen === "reminders"}
+					remindersActive={shown === "reminders"}
 					onOpenReminders={() => navigate("reminders")}
 					onNew={startNew}
-					agentActive={screen === "agent"}
+					agentActive={shown === "agent"}
 					agentPending={agentPending}
 					onOpenAgent={() => navigate("agent")}
 					slotRef={setSlot}
@@ -317,12 +385,16 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 				/>
 				<div className="relative flex min-h-0 flex-1">
 					<Sidebar
-						current={SIDEBAR_ENTRY[screen]}
+						current={SIDEBAR_ENTRY[shown]}
 						onNavigate={navigate}
 						onOpenSettings={() => void window.juno.window.openSettings()}
 					/>
 
-					<main key={`${screen}:${visit}`} className="animate-screen mr-2 mb-2 min-w-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]">
+					{/* Hidden while a preview covers it: its state stays, its effects stop, and its title bar controls go. */}
+					<Activity mode={cover ? "hidden" : "visible"}>
+					<TitleBarSlotContext.Provider value={cover ? NO_SLOTS : { left: slot, right: rightSlot, overflow: overflowSlot, hideNew }}>
+					<ContentHostContext.Provider value={contentHost}>
+					<main ref={setContentHost} key={`${screen}:${visit}`} className={SHEET}>
 						{screen === "overview" ? (
 							<OverviewScreen />
 						) : screen === "clients" ? (
@@ -331,8 +403,6 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<ProjectsScreen />
 						) : screen === "reminders" ? (
 							<RemindersScreen />
-						) : screen === "documents" ? (
-							<DocumentsScreen />
 						) : screen === "mail" ? (
 							<MailScreen />
 						) : screen === "notes" ? (
@@ -341,14 +411,23 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 							<CalendarScreen />
 						) : screen === "mail-templates" ? (
 							<MailTemplatesScreen />
-						) : screen === "document-templates" ? (
-							<DocumentTemplatesScreen />
+						) : screen === "files" ? (
+							<FilesScreen />
 						) : screen === "agent" ? (
 							<AgentScreen />
 						) : (
 							<Placeholder title={SCREEN_LABELS[screen]} />
 						)}
 					</main>
+					</ContentHostContext.Provider>
+					</TitleBarSlotContext.Provider>
+					</Activity>
+
+					{cover ? (
+						<main ref={setCoverHost} key={`cover:${cover.visit}`} className={SHEET}>
+							<DocumentCover documentId={cover.documentId} label={cover.label} onReturn={returnFromCover} />
+						</main>
+					) : null}
 				</div>
 
 				<DocumentDropLayer />
@@ -368,9 +447,16 @@ function MainShell({ lock, walkthroughOpen, onWalkthroughClosed }: MainShellProp
 
 				{walkthroughOpen ? <Walkthrough onNavigate={navigate} onClose={onWalkthroughClosed} /> : null}
 			</div>
+			</ContentHostContext.Provider>
 		</TitleBarSlotContext.Provider>
 	);
 }
+
+/** The sheet a screen is drawn on. */
+const SHEET = "animate-screen relative mr-2 mb-2 min-w-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)]";
+
+/** What a screen hidden under a preview may draw into the title bar: nothing. */
+const NO_SLOTS: TitleBarSlots = { left: null, right: null, overflow: null, hideNew: () => () => undefined };
 
 function Placeholder({ title }: { title: string }) {
 	return (

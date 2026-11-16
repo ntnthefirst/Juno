@@ -12,9 +12,10 @@
  */
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import type {
 	DigitalSignatureInfo,
+	DocumentLatestVersion,
 	DocumentVersion,
 	DocumentVersionKind,
 	DocumentVersionSource,
@@ -32,6 +33,9 @@ export interface NewVersion {
 	pdfPath: string;
 	fileDate: string;
 	fileName?: string | null;
+	/** Defaults to a PDF, which is what every caller wrote before any file could be a version. */
+	mediaType?: string | null;
+	byteSize?: number | null;
 	fileHash?: string | null;
 	textContent?: string | null;
 	signatureId?: string | null;
@@ -40,8 +44,10 @@ export interface NewVersion {
 
 export interface VersionSummary {
 	count: number;
-	latest: { id: string; kind: DocumentVersionKind; fileDate: string };
+	latest: DocumentLatestVersion;
 }
+
+export const PDF = "application/pdf";
 
 export function hashBytes(bytes: Uint8Array): string {
 	return createHash("sha256").update(bytes).digest("hex");
@@ -65,6 +71,9 @@ function liveRows(documentIds: string[], db: Db) {
 			fileDate: documentVersions.fileDate,
 			createdAt: documentVersions.createdAt,
 			pdfPath: documentVersions.pdfPath,
+			fileName: documentVersions.fileName,
+			mediaType: documentVersions.mediaType,
+			byteSize: documentVersions.byteSize,
 		})
 		.from(documentVersions)
 		.where(and(inArray(documentVersions.documentId, documentIds), isNull(documentVersions.deletedAt)))
@@ -83,7 +92,14 @@ export function summaries(documentIds: string[], db: Db = getDb()): Map<string, 
 		const latest = rows.sort(byAge).at(-1)!;
 		out.set(documentId, {
 			count: rows.length,
-			latest: { id: latest.id, kind: latest.kind as DocumentVersionKind, fileDate: latest.fileDate },
+			latest: {
+				id: latest.id,
+				kind: latest.kind as DocumentVersionKind,
+				fileDate: latest.fileDate,
+				fileName: latest.fileName,
+				mediaType: latest.mediaType ?? PDF,
+				byteSize: latest.byteSize,
+			},
 		});
 	}
 	return out;
@@ -108,6 +124,8 @@ export function record(input: NewVersion, db: Db = getDb()): DocumentVersion {
 			pdfPath: input.pdfPath,
 			fileDate: input.fileDate,
 			fileName: input.fileName ?? null,
+			mediaType: input.mediaType ?? PDF,
+			byteSize: input.byteSize ?? null,
 			fileHash: input.fileHash ?? null,
 			textContent: input.textContent ?? null,
 			signatureId: input.signatureId ?? null,
@@ -151,6 +169,8 @@ export function list(documentId: string, db: Db = getDb()): DocumentVersion[] {
 			kind: version.kind as DocumentVersionKind,
 			source: version.source as DocumentVersionSource,
 			fileName: version.fileName,
+			mediaType: version.mediaType ?? PDF,
+			byteSize: version.byteSize,
 			fileDate: version.fileDate,
 			fileHash: version.fileHash,
 			signatureId: version.signatureId,
@@ -205,6 +225,65 @@ export function pathOf(versionId: string, db: Db = getDb()): string {
 		.get();
 	if (!row) throw new Error("That version no longer exists.");
 	return row.pdfPath;
+}
+
+export interface VersionFile {
+	versionId: string;
+	documentId: string;
+	path: string;
+	/** The name the file arrived with, or one made from the stored file's own. */
+	fileName: string;
+	mediaType: string;
+	kind: DocumentVersionKind;
+	fileDate: string;
+	fileHash: string | null;
+}
+
+/** The file behind one version with what is known about it, resolved from its id. */
+export function fileOf(versionId: string, db: Db = getDb()): VersionFile {
+	const row = db
+		.select()
+		.from(documentVersions)
+		.where(and(eq(documentVersions.id, versionId), isNull(documentVersions.deletedAt)))
+		.get();
+	if (!row) throw new Error("That version no longer exists.");
+	return {
+		versionId: row.id,
+		documentId: row.documentId,
+		path: row.pdfPath,
+		fileName: row.fileName ?? row.pdfPath.split(/[\\/]/).pop() ?? "Document.pdf",
+		mediaType: row.mediaType ?? PDF,
+		kind: row.kind as DocumentVersionKind,
+		fileDate: row.fileDate,
+		fileHash: row.fileHash,
+	};
+}
+
+/** The words recorded for a version, for a copy that says the same thing. */
+export function textOf(versionId: string, db: Db = getDb()): string | null {
+	return (
+		db
+			.select({ text: documentVersions.textContent })
+			.from(documentVersions)
+			.where(eq(documentVersions.id, versionId))
+			.get()?.text ?? null
+	);
+}
+
+/** A file's size in bytes, or null when it cannot be read. */
+export function sizeOf(path: string): number | null {
+	try {
+		return statSync(path).size;
+	} catch {
+		return null;
+	}
+}
+
+/** The newest version of a document as a file. Throws for a document with no file yet. */
+export function latestFileOf(documentId: string, db: Db = getDb()): VersionFile {
+	const latest = summaries([documentId], db).get(documentId)?.latest;
+	if (!latest) throw new Error("This document has no file yet. Create one first.");
+	return fileOf(latest.id, db);
 }
 
 /** The certificate beside one signed version. Older signatures have none: their details are on the file's last page. */

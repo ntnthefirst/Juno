@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { Client, ClientSummary, MailAddress, MailMessageClient } from "@shared/types";
 import { Icon } from "../../components/Icon";
+import { RecordLink } from "../../components/RecordLink";
 import { Segmented } from "../../components/Segmented";
 import { messageOf } from "../../lib/errors";
 import { requestOpenClient } from "../../lib/open-client";
+import { requestOpen } from "../../lib/open-entity";
 import { ConnectClientDialog } from "./ConnectClientDialog";
 import { displayName } from "./format";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type PersonChipProps = {
 	person: MailAddress;
@@ -24,6 +27,11 @@ type PersonChipProps = {
 	/** The address was just added to a client. */
 	onConnected: (client: ClientSummary) => void;
 };
+
+/** A website as a client typed it, opened over https only (electron/main/windows/chrome.ts). */
+function websiteHref(website: string): string {
+	return /^https?:\/\//i.test(website) ? website.replace(/^http:\/\//i, "https://") : `https://${website}`;
+}
 
 type Lookup =
 	| { status: "loading" }
@@ -91,6 +99,10 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 
 	if (isMine) return <span className="text-[var(--ink)]">{text}</span>;
 
+	function openClient(match: MailMessageClient | null) {
+		if (match) requestOpenClient(match.clientId, match.clientName);
+	}
+
 	async function copy() {
 		try {
 			await navigator.clipboard.writeText(person.address);
@@ -132,6 +144,22 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 						</div>
 						<button
 							type="button"
+							aria-label={`Write to ${person.address}`}
+							title="New message"
+							onClick={() => {
+								setOpen(false);
+								requestOpen({
+									kind: "compose",
+									to: [person],
+									clientId: lookup.status === "ready" ? (lookup.match?.clientId ?? null) : null,
+								});
+							}}
+							className="inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
+						>
+							<Icon name="mail" size={14} />
+						</button>
+						<button
+							type="button"
 							aria-label="Copy address"
 							title="Copy address"
 							onClick={() => void copy()}
@@ -143,7 +171,7 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 
 					<div className="mt-2 border-t border-[var(--line)] pt-2">
 						{lookup.status === "loading" ? (
-							<p className="text-[var(--ink-muted)]">Loading.</p>
+							<CardSkeleton lines={2} framed={false} />
 						) : lookup.status === "error" ? (
 							<p role="alert" className="text-[var(--risk)]">
 								{lookup.message}
@@ -154,7 +182,9 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 									<p className="text-overline uppercase text-[var(--ink-muted)]">
 										Client
 									</p>
-									<p className="truncate font-[var(--weight-medium)]">{lookup.match.clientName}</p>
+									<p className="truncate font-[var(--weight-medium)]">
+										<RecordLink onOpen={() => openClient(lookup.match)}>{lookup.match.clientName}</RecordLink>
+									</p>
 									{lookup.client?.vatNumber ? (
 										<p className="tabular truncate text-sm text-[var(--ink-muted)]">
 											{lookup.client.vatNumber}
@@ -162,7 +192,15 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 									) : null}
 									{lookup.client?.website ? (
 										<p className="truncate text-sm text-[var(--ink-muted)]">
-											{lookup.client.website}
+											{/* Opened over https only, by the window's own external-link rule. */}
+											<a
+												href={websiteHref(lookup.client.website)}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="rounded-[var(--radius-sm)] hover:text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+											>
+												{lookup.client.website}
+											</a>
 										</p>
 									) : null}
 								</div>
@@ -170,9 +208,7 @@ export function PersonChip({ person, label, mine, trust, onNotice, onConnected }
 									type="button"
 									aria-label={`Open ${lookup.match.clientName}`}
 									title="Open client"
-									onClick={() => {
-										if (lookup.match) requestOpenClient(lookup.match.clientId, lookup.match.clientName);
-									}}
+									onClick={() => openClient(lookup.match)}
 									className="inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--ink-muted)] hover:bg-[var(--hover)] hover:text-[var(--ink)]"
 								>
 									<Icon name="external" size={14} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { parseMarkdown, toMarkdown, type Block } from "@shared/blocks";
+import { newBlockId, parseMarkdown, toMarkdown, type Block } from "@shared/blocks";
 import type { Note, NoteHit, ProjectSummary } from "@shared/types";
 import { BlockEditor } from "../../components/BlockEditor";
 import { Button } from "../../components/Button";
@@ -16,13 +16,16 @@ import { groupByDay } from "../../lib/day-groups";
 import { messageOf } from "../../lib/errors";
 import { blankMenuFor } from "../../lib/blank-menu";
 import { contextMenuFor } from "../../lib/native-menu";
-import { clearPending, peekPending } from "../../lib/open-entity";
+import { RecordLink } from "../../components/RecordLink";
+import { requestOpenClient } from "../../lib/open-client";
+import { clearPending, peekPending, requestOpen } from "../../lib/open-entity";
 import { useScreenAction } from "../../lib/screen-actions";
 import { useLoaded } from "../../lib/use-loaded";
 import { useRecentTouch } from "../../lib/use-recent-touch";
 import { useRowSelection } from "../../lib/use-row-selection";
 import { editedLabel, groupLabel, noteTitle, notePreview, rowTime } from "./note-format";
 import { listAllNotes } from "../../lib/list-all-notes";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 const loadNotes = () => listAllNotes();
 
@@ -34,7 +37,12 @@ type Row = { note: Note; preview: string };
 export function NotesScreen() {
 	const notes = useLoaded(loadNotes);
 	const [selectedId, setSelectedId] = useState<string | null>(() => peekPending("note")?.id ?? null);
-	useEffect(() => clearPending, []);
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
 	const [search, setSearch] = useState("");
 	const [hits, setHits] = useState<{ term: string; rows: NoteHit[] } | null>(null);
 	const [notice, setNotice] = useState<{ message: string; undo?: () => void } | null>(null);
@@ -42,13 +50,19 @@ export function NotesScreen() {
 	const [focusTitle, setFocusTitle] = useState(false);
 	// A delete of several asks first, and is undone as one.
 	const [confirmingDelete, setConfirmingDelete] = useState<string[] | null>(null);
+	// Writes what the open note has typed and not yet saved. A delete waits for
+	// it, so the note goes, and comes back on Undo, with its last keystrokes.
+	const [saveOpenNote, setSaveOpenNote] = useState<(() => Promise<void>) | null>(null);
+	const registerSave = useCallback((save: (() => Promise<void>) | null) => setSaveOpenNote(() => save), []);
 
 
 	const reload = notes.reload;
 	const term = search.trim();
 
+	// Searched again whenever the list is read again, so a duplicate or an edit made while searching is found.
+	const listed = notes.status === "ready" ? notes.value : null;
 	useEffect(() => {
-		if (term === "") return;
+		if (term === "" || listed === null) return;
 		let cancelled = false;
 		const timer = window.setTimeout(() => {
 			window.juno.notes
@@ -64,7 +78,7 @@ export function NotesScreen() {
 			cancelled = true;
 			window.clearTimeout(timer);
 		};
-	}, [term]);
+	}, [term, listed]);
 
 	const create = useCallback(async () => {
 		try {
@@ -85,7 +99,12 @@ export function NotesScreen() {
 		if (!all) return [];
 		if (!searching) return all.map((note) => ({ note, preview: notePreview(note) }));
 		if (hits?.term !== term) return [];
-		return hits.rows.map((hit) => ({ note: hit.note, preview: hit.snippet }));
+		// A hit is drawn from the list as it is now, so a note deleted or edited since the search came back shows as it is.
+		const live = new Map(all.map((note) => [note.id, note]));
+		return hits.rows.flatMap((hit) => {
+			const note = live.get(hit.note.id);
+			return note ? [{ note, preview: hit.snippet }] : [];
+		});
 	}, [all, searching, hits, term]);
 
 	// The first note opens when nothing is chosen, so the screen is never a list beside a blank page.
@@ -95,6 +114,7 @@ export function NotesScreen() {
 
 	async function remove(note: Note) {
 		try {
+			if (openId === note.id) await saveOpenNote?.();
 			await window.juno.notes.remove(note.id);
 			if (openId === note.id) setSelectedId(null);
 			setNotice({
@@ -159,6 +179,7 @@ export function NotesScreen() {
 	async function deleteSelected(ids: string[]) {
 		setConfirmingDelete(null);
 		try {
+			if (openId !== null && ids.includes(openId)) await saveOpenNote?.();
 			const removed = await window.juno.notes.removeMany(ids);
 			selection.clear();
 			if (openId !== null && ids.includes(openId)) setSelectedId(null);
@@ -286,7 +307,7 @@ export function NotesScreen() {
 					</div>
 				) : null}
 				<div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-					{notes.status === "loading" ? <p className="px-4 text-dense text-[var(--ink-muted)]">Loading.</p> : null}
+					{notes.status === "loading" ? <RowsSkeleton rows={8} /> : null}
 					{notes.status === "error" ? (
 						<p data-selectable className="px-4 text-dense text-[var(--risk)]">
 							{notes.message}
@@ -322,6 +343,7 @@ export function NotesScreen() {
 						onFocused={() => setFocusTitle(false)}
 						onSaved={reload}
 						onError={(message) => setNotice({ message })}
+						onSaveReady={registerSave}
 					/>
 				) : null}
 			</section>
@@ -374,6 +396,8 @@ type NoteEditorProps = {
 	onFocused: () => void;
 	onSaved: () => void;
 	onError: (message: string) => void;
+	/** Hands over this editor's save while it is open, so the screen can write before a delete. */
+	onSaveReady: (save: (() => Promise<void>) | null) => void;
 };
 
 /**
@@ -381,11 +405,12 @@ type NoteEditorProps = {
  * moment after typing stops, and again when it goes away, so switching to
  * another note or leaving the screen never loses the last keystrokes.
  */
-function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEditorProps) {
+function NoteEditor({ note, focusTitle, onFocused, onSaved, onError, onSaveReady }: NoteEditorProps) {
 	const [title, setTitle] = useState(note.title);
 	const [blocks, setBlocks] = useState<Block[]>(() => {
 		const parsed = parseMarkdown(note.body);
-		return parsed.length > 0 ? parsed : parseMarkdown("");
+		// An empty body parses to no lines at all, and the editor needs one to type on.
+		return parsed.length > 0 ? parsed : [{ id: newBlockId(), type: "text", text: "" }];
 	});
 	const draft = useRef<{ title: string; body: string } | null>(null);
 	const timer = useRef<number | null>(null);
@@ -396,13 +421,13 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 		saved.current = { onSaved, onError };
 	});
 
-	const flush = useCallback(() => {
+	const flush = useCallback((): Promise<void> => {
 		if (timer.current !== null) window.clearTimeout(timer.current);
 		timer.current = null;
 		const pending = draft.current;
-		if (!pending) return;
+		if (!pending) return Promise.resolve();
 		draft.current = null;
-		window.juno.notes
+		return window.juno.notes
 			.update(note.id, pending)
 			.then(() => saved.current.onSaved())
 			.catch((cause: unknown) => saved.current.onError(messageOf(cause)));
@@ -412,12 +437,17 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 		(next: { title: string; body: string }) => {
 			draft.current = next;
 			if (timer.current !== null) window.clearTimeout(timer.current);
-			timer.current = window.setTimeout(flush, SAVE_AFTER_MS);
+			timer.current = window.setTimeout(() => void flush(), SAVE_AFTER_MS);
 		},
 		[flush],
 	);
 
-	useEffect(() => flush, [flush]);
+	useEffect(() => () => void flush(), [flush]);
+
+	useEffect(() => {
+		onSaveReady(flush);
+		return () => onSaveReady(null);
+	}, [onSaveReady, flush]);
 
 	useEffect(() => {
 		if (!focusTitle) return;
@@ -435,7 +465,7 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 		schedule({ title: next, body: toMarkdown(blocks) });
 	}
 
-	const owner = [note.clientName, note.projectName].filter(Boolean).join(" · ");
+	const { clientId, clientName, projectId, projectName } = note;
 
 	return (
 		<div className="mx-auto w-full max-w-[860px] px-14 pt-16 pb-24">
@@ -455,7 +485,23 @@ function NoteEditor({ note, focusTitle, onFocused, onSaved, onError }: NoteEdito
 			/>
 			<p className="mt-2 mb-6 text-sm text-[var(--ink-muted)]">
 				<span className="tabular">{editedLabel(note.updatedAt)}</span>
-				{owner ? ` · ${owner}` : ""}
+				{/* What the note is filed under, each a way to that record. */}
+				{clientName ? " · " : null}
+				{clientId && clientName ? (
+					<RecordLink tone="quiet" onOpen={() => requestOpenClient(clientId, clientName)}>
+						{clientName}
+					</RecordLink>
+				) : (
+					clientName
+				)}
+				{projectName ? " · " : null}
+				{projectId && projectName ? (
+					<RecordLink tone="quiet" onOpen={() => requestOpen({ kind: "project", id: projectId, name: projectName })}>
+						{projectName}
+					</RecordLink>
+				) : (
+					projectName
+				)}
 			</p>
 			<BlockEditor blocks={blocks} onChange={changeBlocks} variant="note" containerRef={area} />
 		</div>
@@ -474,12 +520,27 @@ function MoveDialog({ note, onClose, onMoved, onError }: MoveDialogProps) {
 	const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
 	const [projectId, setProjectId] = useState(note.projectId ?? "");
 
+	// Read once when the dialog opens. The screen behind passes a new onError on
+	// every render, and an autosave behind the dialog would otherwise read the
+	// projects again, or without end when the read fails.
+	const reportError = useRef(onError);
 	useEffect(() => {
+		reportError.current = onError;
+	});
+	useEffect(() => {
+		let cancelled = false;
 		window.juno.projects
 			.list()
-			.then((list) => setProjects(list))
-			.catch((cause: unknown) => onError(messageOf(cause)));
-	}, [onError]);
+			.then((list) => {
+				if (!cancelled) setProjects(list);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) reportError.current(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	async function move() {
 		try {

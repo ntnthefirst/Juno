@@ -1,5 +1,6 @@
 import type { DocumentTimelineEntry, DocumentTimelineKind } from "@shared/types";
 import { Icon, type IconName } from "../../components/Icon";
+import { requestOpen } from "../../lib/open-entity";
 import { formatInstant } from "./version-format";
 
 type DocumentTimelineProps = {
@@ -14,6 +15,8 @@ const ICONS: Record<DocumentTimelineKind, IconName> = {
 	imported: "import",
 	stamped: "edit",
 	signed: "lock",
+	edited: "edit",
+	converted: "documents",
 	emailed: "sent",
 };
 
@@ -26,7 +29,7 @@ function toneClass(kind: DocumentTimelineKind): string {
 
 /**
  * Everything that happened to the document, newest first. An entry that made a
- * version opens it in the viewer.
+ * version opens it in the viewer, and an email opens its conversation in Mail.
  */
 export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 	if (entries.length === 0) {
@@ -49,6 +52,12 @@ export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 						</span>
 					</>
 				);
+				const { versionId, threadId } = entry;
+				const open = versionId
+					? { run: () => onView(versionId), label: undefined }
+					: threadId
+						? { run: () => requestOpen({ kind: "thread", id: threadId, messageId: null }), label: "Open the conversation in Mail" }
+						: null;
 				return (
 					<li key={entry.id} className="relative flex gap-3 pb-4 last:pb-0">
 						{index < entries.length - 1 ? (
@@ -59,10 +68,11 @@ export function DocumentTimeline({ entries, onView }: DocumentTimelineProps) {
 						>
 							<Icon name={ICONS[entry.kind]} size={12} />
 						</span>
-						{entry.versionId ? (
+						{open ? (
 							<button
 								type="button"
-								onClick={() => onView(entry.versionId!)}
+								onClick={open.run}
+								title={open.label}
 								className="min-w-0 flex-1 rounded-[var(--radius-sm)] text-left hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 							>
 								{body}

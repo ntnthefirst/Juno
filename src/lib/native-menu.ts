@@ -13,6 +13,8 @@ export type MenuHandlers = Partial<Record<MenuAction, () => void>> & {
 	done?: (message: string | undefined) => void;
 	/** It could not be done. The message is worth showing. */
 	failed?: (message: string) => void;
+	/** Done, with nothing to read again, and worth saying. A screen that does not list it shows it through `done`. */
+	notice?: (message: string) => void;
 };
 
 type Point = { x: number; y: number };
@@ -49,6 +51,7 @@ export async function showNativeMenu(target: MenuTarget, at: Point, handlers: Me
 	if (outcome.type === "ui") handlers[outcome.action]?.();
 	else if (outcome.type === "done") handlers.done?.(outcome.message);
 	else if (outcome.type === "failed") handlers.failed?.(outcome.message);
+	else if (outcome.type === "notice") (handlers.notice ?? handlers.done)?.(outcome.message);
 }
 
 /**

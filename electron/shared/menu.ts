@@ -10,7 +10,22 @@
  */
 
 /** The kinds drawn in the design's Context Menu set. */
-export const MENU_KINDS = ["reminder", "event", "client", "file", "mail", "blank", "project", "add", "block", "note", "outbox", "template"] as const;
+export const MENU_KINDS = [
+	"reminder",
+	"event",
+	"client",
+	"file",
+	"mail",
+	"blank",
+	"project",
+	"add",
+	"block",
+	"note",
+	"outbox",
+	"template",
+	/** An attachment of a received mail, in the reader. */
+	"attachment",
+] as const;
 export type MenuKind = (typeof MENU_KINDS)[number];
 
 /** A blank area is named by the screen it is on, so the menu can start with what belongs there. */
@@ -30,8 +45,10 @@ export const BLOCK_KINDS = ["intro", "outro"] as const;
  * - `unread`: the mail list, with a folder open that has unread mail in it.
  * - `reader`: a conversation's own "..." button, which acts on the message in view.
  * - `subscription`: an event-kind chip from a calendar subscription, which is read only.
+ * - `untrusted`: an attachment whose sender is not trusted, which is previewed and kept but not opened in its app.
+ * - `several`: a file that is one of several selected, so the menu acts on all of them.
  */
-export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader", "subscription"] as const;
+export const MENU_CONTEXTS = ["deadline", "trash", "detail", "unread", "reader", "subscription", "untrusted", "several"] as const;
 export type MenuContext = (typeof MENU_CONTEXTS)[number];
 
 export type MenuRequest = {
@@ -71,13 +88,11 @@ export const MENU_ACTIONS = [
 	"new-reminder",
 	"new-client",
 	"new-project",
-	"new-document",
 	"new-page",
 	"move-to-project",
 	"new-message",
 	"send-mail",
 	"retry",
-	"cancel-send",
 	"use-template",
 	"show-wide",
 	"open-template",
@@ -100,6 +115,22 @@ export const MENU_ACTIONS = [
 	"edit-block",
 	"new-block",
 	"manage-blocks",
+	"preview",
+	"copy-to",
+	"move-to",
+	"rename",
+	"convert-pdf",
+	"sign",
+	"add-files",
+	"save-as",
+	"save-to-place",
+	"save-all-to-place",
+	"save-to",
+	"add-to-project-files",
+	"open-document",
+	"copy",
+	"paste",
+	"duplicate",
 ] as const;
 export type MenuAction = (typeof MENU_ACTIONS)[number];
 
@@ -112,6 +143,8 @@ export type MenuOutcome =
 	| { type: "none" }
 	/** The main process did it. The screen reloads and may show the note. */
 	| { type: "done"; message?: string }
+	/** The main process did it and nothing on screen changed. The screen shows the note and reads nothing again. */
+	| { type: "notice"; message: string }
 	/** It could not be done, in words worth showing. */
 	| { type: "failed"; message: string }
 	/** Only the screen can do this one. */
@@ -136,22 +169,28 @@ export const MENU_ICONS = [
 	"export",
 	"external",
 	"flag",
+	"folder-add",
+	"folder-open",
 	"forward",
 	"import",
 	"junk",
 	"link",
 	"mail",
+	"move-right",
 	"note",
+	"panel",
 	"play",
 	"projects",
 	"read",
 	"reminders",
 	"remove",
 	"reply",
+	"sign",
 	"stop",
 	"sync",
 	"templates",
 	"undo",
+	"visible",
 ] as const;
 export type MenuIcon = (typeof MENU_ICONS)[number];
 

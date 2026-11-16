@@ -6,6 +6,7 @@ import { Kbd } from "../../components/Kbd";
 import { Toggle } from "../../components/Toggle";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 /**
  * Notifications and tray. Windows toasts, the tray icon, the taskbar badge and
@@ -87,7 +88,7 @@ export function DesktopSection() {
 			description="Toasts, the tray icon, the taskbar badge and a shortcut for a new note. Nothing here sends anything off this computer."
 		>
 			{view === null ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={4} framed={false} />
 			) : !view.supported ? (
 				<p className="text-dense text-[var(--ink-muted)]">These settings are for Windows.</p>
 			) : (

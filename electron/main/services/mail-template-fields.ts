@@ -5,8 +5,7 @@
  * A mail template used to reach into the client, the project and the owner's
  * settings, which meant the message depended on which client was linked when
  * it was used, and that a template could not be read without a client to read
- * it against. It now works the way a document template on paper does
- * (docs/templates.md): every value it prints is an input, written
+ * it against. Now every value it prints is an input, written
  * `{{document.<key>}}`, typed by a person or an agent when it is used.
  * Choosing a client only decides who it goes to and where it is filed.
  *
@@ -15,8 +14,29 @@
  */
 import type { TemplateInput, TemplateInputKind } from "../../shared/types";
 import { formatDate } from "./document-context";
-import { isImageData, missingImage } from "./document-canvas";
-import { placeholdersIn } from "./template-render";
+import { escapeHtml, placeholdersIn } from "./template-render";
+
+const IMAGE_DATA = /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i;
+
+/** A picture value a person or an agent supplied: the bytes inline, never an address. */
+export function isImageData(value: string): boolean {
+	return IMAGE_DATA.test(value.trim());
+}
+
+/**
+ * Stands in for a picture input left empty. A missing value has to be visible
+ * (template-render.ts), but the marker is markup and would break the `src` it
+ * landed in, so a picture gets a picture of the marker instead.
+ */
+export function missingImage(path: string): string {
+	const label = escapeHtml(`[ontbreekt: ${path}]`);
+	const svg =
+		`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="80" viewBox="0 0 320 80">` +
+		`<rect x="1" y="1" width="318" height="78" fill="#ffe8e8" stroke="#b03030" stroke-width="2"/>` +
+		`<text x="160" y="46" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="600" fill="#8f2020">${label}</text>` +
+		`</svg>`;
+	return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+}
 
 /**
  * The context a template is rendered against: what was typed for each input,

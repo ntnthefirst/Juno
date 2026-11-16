@@ -10,7 +10,7 @@
  * It lives in the services layer and takes the tools' titles as an argument,
  * because the registry that knows them sits above it.
  */
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type {
 	AgentAction,
 	AgentActionView,
@@ -23,14 +23,15 @@ import type {
 import { isLocked } from "../../shared/agent-permissions";
 import { getDb, type Db } from "../db";
 import { rowOf } from "./agent-permissions";
+import { unsavedAttachmentNames } from "./document-mail";
 import {
 	automations,
 	calendarEvents,
 	clients,
 	contacts,
 	documents,
-	documentTemplates,
 	mailAccounts,
+	mailAttachments,
 	mailFolders,
 	mailMessages,
 	mailOutbox,
@@ -57,7 +58,6 @@ const ROLES: Record<AgentEntityKind, string> = {
 	mailMessage: "Message",
 	mailDraft: "Draft",
 	mailTemplate: "Template",
-	documentTemplate: "Template",
 	document: "Document",
 	reminder: "Reminder",
 	event: "Event",
@@ -91,7 +91,6 @@ const ID_KINDS: [prefix: string, kind: AgentEntityKind][] = [
 	["mail.folders.", "mailFolder"],
 	["mail.accounts.", "mailAccount"],
 	["mail.templates.", "mailTemplate"],
-	["templates.", "documentTemplate"],
 	["contacts.", "contact"],
 	["clients.", "client"],
 	["projects.", "project"],
@@ -104,14 +103,15 @@ const ID_KINDS: [prefix: string, kind: AgentEntityKind][] = [
 /** What `id` means in a tool name, or null when it is something this does not name. */
 export function kindOfId(toolName: string): AgentEntityKind | null {
 	// clients.emails.update takes the id of an email row, not of a client.
-	if (/^(clients|projects)\.[a-z_]+\./.test(toolName)) return null;
+	// The same goes for any tool a level below its domain.
+	if (/^(clients|projects|documents)\.[a-z_]+\./.test(toolName)) return null;
 	for (const [prefix, kind] of ID_KINDS) if (toolName.startsWith(prefix)) return kind;
 	return null;
 }
 
 function kindOfKey(toolName: string, key: string): AgentEntityKind | null {
 	if (key === "id") return kindOfId(toolName);
-	if (key === "template_id") return toolName.startsWith("templates.") ? "documentTemplate" : "mailTemplate";
+	if (key === "template_id") return "mailTemplate";
 	if (key === "parent_id") return toolName.startsWith("mail.folders.") ? "mailFolder" : null;
 	return KEY_KINDS[key] ?? null;
 }
@@ -186,10 +186,6 @@ function find(db: Db, kind: AgentEntityKind, id: string): Found {
 		}
 		case "mailTemplate": {
 			const row = db.select({ name: mailTemplates.name, deletedAt: mailTemplates.deletedAt }).from(mailTemplates).where(eq(mailTemplates.id, id)).get();
-			return row ? { label: row.name, detail: null, gone: row.deletedAt !== null } : MISSING;
-		}
-		case "documentTemplate": {
-			const row = db.select({ name: documentTemplates.name, deletedAt: documentTemplates.deletedAt }).from(documentTemplates).where(eq(documentTemplates.id, id)).get();
 			return row ? { label: row.name, detail: null, gone: row.deletedAt !== null } : MISSING;
 		}
 		case "document": {
@@ -302,6 +298,30 @@ function render(value: unknown): { text: string; long: boolean } | null {
 	return { text: clip(JSON.stringify(value)), long: true };
 }
 
+/**
+ * The names of the mail attachments a call names, or, for a conversation's
+ * save with none named, of every one it would save. Null when the call names
+ * no attachment.
+ */
+function attachmentNames(toolName: string, args: Record<string, unknown>, db: Db): string[] | null {
+	const named = [
+		...(typeof args.attachment_id === "string" ? [args.attachment_id] : []),
+		...(Array.isArray(args.attachment_ids) ? args.attachment_ids.filter((id): id is string => typeof id === "string") : []),
+	];
+	if (named.length > 0) {
+		const rows = db
+			.select({ id: mailAttachments.id, filename: mailAttachments.filename })
+			.from(mailAttachments)
+			.where(inArray(mailAttachments.id, named))
+			.all();
+		return named.map((id) => rows.find((row) => row.id === id)?.filename ?? "An attachment that is gone");
+	}
+	if (toolName === "documents.import_from_thread" && typeof args.thread_id === "string") {
+		return unsavedAttachmentNames(args.thread_id, db);
+	}
+	return null;
+}
+
 /** A tool in a row that can never be Allow, or one nobody classified, is read in full. */
 function needsReview(toolName: string): boolean {
 	try {
@@ -327,6 +347,13 @@ export function describeAction(action: AgentAction, titleOf: TitleOf, db: Db = g
 		if (ids.length > MAX_ENTITIES) {
 			fields.push({ label: `More ${ROLES[kind].toLowerCase()}s`, value: `${ids.length - MAX_ENTITIES} not shown`, long: false });
 		}
+	}
+
+	// Attachments are files, named by the name they arrived with, so the request lists every one it saves.
+	const files = attachmentNames(action.toolName, action.args, db);
+	if (files) {
+		consumed.add("attachment_id").add("attachment_ids");
+		fields.push({ label: files.length === 1 ? "File" : "Files", value: files.join(", ") || "None", long: files.length > 6 });
 	}
 
 	for (const [key, value] of Object.entries(action.args)) {

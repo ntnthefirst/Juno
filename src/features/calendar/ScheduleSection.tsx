@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { IconButton } from "../../components/IconButton";
 import { ContextMenu } from "../../components/Menu";
+import { RecordLink } from "../../components/RecordLink";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { requestOpen } from "../../lib/open-entity";
 import { addDays, formatDate, formatTime, todayIso } from "./dates";
 import { scheduleRows, type ScheduleRow } from "./schedule-rows";
 import type { ScheduleForm } from "./schedule-form";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ScheduleSectionProps = {
 	/** One of these. A project's list is its own; a client's list is everything under it. */
@@ -128,7 +131,7 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 	function complete(row: ScheduleRow) {
 		if (row.kind !== "reminder") return;
 		void run(async () => {
-			const done = await window.juno.reminders.complete(row.item.reminderId);
+			const done = await window.juno.reminders.complete(row.item.reminderId, null, row.item.dueOn);
 			setNotice(
 				done.completedAt
 					? `${row.item.title} done.`
@@ -191,7 +194,7 @@ export function ScheduleSection({ clientId, projectId, showProject = false, onOp
 					{load.message}
 				</p>
 			) : load.status === "loading" ? (
-				<p className="text-sm text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={3} />
 			) : rows.length === 0 ? (
 				<p className="text-sm text-[var(--ink-muted)]">
 					Nothing planned. Add a date for a meeting or a delivery, or a reminder for something to do.
@@ -247,17 +250,12 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 		row.kind === "event" && !row.item.allDay
 			? `${formatDate(row.date)} ${formatTime(row.item.startUtc)}`
 			: formatDate(row.date);
-	const detail = [
-		showProject ? item.projectName : null,
-		repeatLabel(row),
-		row.kind === "event" ? row.item.location : null,
-	]
-		.filter(Boolean)
-		.join(" / ");
+	const project = showProject && item.projectId && item.projectName ? { id: item.projectId, name: item.projectName } : null;
+	const detail = [repeatLabel(row), row.kind === "event" ? row.item.location : null].filter(Boolean).join(" / ");
 
 	return (
 		<li
-			className="group flex items-center gap-3 border-b border-[var(--line)] px-2"
+			className="group relative flex items-center gap-3 border-b border-[var(--line)] px-2 transition-colors duration-[var(--duration-fast)] ease-[var(--ease)] hover:bg-[var(--accent-soft)] focus-within:bg-[var(--accent-soft)]"
 			style={{ height: "var(--row-height)" }}
 		>
 			<span
@@ -266,16 +264,40 @@ function ScheduleRowItem({ row, showProject, onEdit, onRemove, onComplete }: Sch
 					row.kind === "event" ? "bg-[var(--accent)]" : overdue ? "bg-[var(--risk)]" : "bg-[var(--warn)]"
 				}`}
 			/>
-			<span className="min-w-0 flex-1 truncate text-dense">
-				{item.title}
-				{detail ? <span className="ml-2 text-sm text-[var(--ink-muted)]">{detail}</span> : null}
+			<span className="flex min-w-0 flex-1 items-baseline gap-2 text-dense">
+				{/* The title opens the same form page as the pencil. */}
+				<button
+					type="button"
+					onClick={onEdit}
+					className="max-w-full shrink-0 truncate rounded-[var(--radius-sm)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+				>
+					{item.title}
+				</button>
+				{project ? (
+					<RecordLink
+						tone="quiet"
+						className="min-w-0 shrink text-sm text-[var(--ink-muted)]"
+						onOpen={() => requestOpen({ kind: "project", ...project })}
+					>
+						{project.name}
+					</RecordLink>
+				) : null}
+				{/* The title keeps its room; what is said after it gives way first. */}
+				{detail ? (
+					<span title={detail} className="min-w-0 flex-1 truncate text-sm text-[var(--ink-muted)]">
+						{detail}
+					</span>
+				) : null}
 			</span>
 			<span
 				className={`tabular flex-none text-sm ${overdue ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
 			>
 				{overdue ? `Overdue, ${when}` : when}
 			</span>
-			<span className="flex flex-none items-center opacity-0 focus-within:opacity-100 group-hover:opacity-100">
+			{/* Laid over the right of the row rather than beside it, so while they
+			    are hidden the repeat line has the whole width, and showing them
+			    on hover or focus moves nothing. The tint matches the row's own. */}
+			<span className="pointer-events-none absolute inset-y-0 right-0 flex items-center bg-[var(--accent-soft)] pl-2 pr-1 opacity-0 transition-opacity duration-[var(--duration-fast)] ease-[var(--ease)] focus-within:pointer-events-auto focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
 				{row.kind === "reminder" ? (
 					<IconButton label={`Mark ${item.title} done`} icon="check" onClick={onComplete} />
 				) : null}

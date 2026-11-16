@@ -1,6 +1,10 @@
 /**
- * Bringing a PDF in: as a document of its own, or as a new version of one that
- * exists, and working out which of the two it probably is.
+ * Bringing a file in: as a document of its own, or as a new version of one
+ * that exists, and working out which of the two it probably is.
+ *
+ * Any kind of file (decision 75). A PDF, a Word file, a spreadsheet and plain
+ * text are recognised by their words as well as their bytes; anything else by
+ * its bytes or its name only (file-text.ts).
  *
  * A file arrives three ways: bytes the window read from a drop or its picker, a
  * mail attachment named by id, or a path an agent gives. The first two are
@@ -13,42 +17,54 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { extensionOf } from "../../shared/mime";
 import type {
 	AddVersionInput,
+	AnalyseImportInput,
 	DocumentVersion,
 	DocumentVersionSource,
 	ImportAnalysis,
 	ImportDocumentInput,
 	ImportFileInput,
+	CreateFileInput,
+	ImportFromMailInput,
+	ImportFromMailResult,
 	ImportMatch,
 	ImportSource,
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
 import { documents, mailAttachments, mailMessages, mailThreads } from "../db/schema";
 import { todayIsoDate } from "./document-context";
-import * as versions from "./document-versions";
 import { resolveOwner } from "./document-owner";
+import { assertTitleFree, availableTitle, documentTitled, resolvePlace } from "./document-place";
+import * as versions from "./document-versions";
 import { documentStorageDir, fileNameFor, get, type DocumentRecord } from "./documents";
+import { familyOf, isPdfBytes, mediaTypeFor } from "./file-kind";
+import { matchText } from "./file-text";
 import { attachmentPath } from "./mail-threads";
-import { compareText, extractText } from "./pdf-text";
+import { compareText } from "./pdf-text";
 
-/** Largest PDF that can be brought in. A contract does not need to be bigger. */
-export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+/**
+ * Largest file that can be brought in. Every byte crosses from the window as
+ * one message, so this is a limit on that as much as on the folder.
+ */
+export const MAX_IMPORT_BYTES = 100 * 1024 * 1024;
 
 /** How many documents an analysis offers. More than this is a list nobody reads. */
 const MAX_MATCHES = 5;
 
-interface Resolved {
+export interface Resolved {
 	bytes: Buffer;
 	fileName: string;
 	fileDate: string;
+	mediaType: string;
 	source: DocumentVersionSource;
 	mailAttachmentId: string | null;
 	/** The client the mail thread is linked to, when it came from mail. */
 	threadClientId: string | null;
 }
 
-function validDate(value: string | undefined, fallback: string): string {
+export function validDate(value: string | undefined, fallback: string): string {
 	if (!value) return fallback;
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return fallback;
@@ -59,25 +75,32 @@ function validDate(value: string | undefined, fallback: string): string {
 	return iso > nowIso ? nowIso : iso;
 }
 
-function checkPdf(bytes: Buffer, label: string): void {
-	if (bytes.length === 0 || bytes.subarray(0, 5).toString("latin1") !== "%PDF-") {
-		throw new Error(`"${label}" is not a PDF. Choose a file that starts with a PDF header.`);
-	}
+/**
+ * Refuses an empty file, one past the size limit, and one that calls itself a
+ * PDF and is not, because everything downstream of a `.pdf` (the viewer,
+ * signing) trusts that it is one.
+ */
+export function checkFile(bytes: Uint8Array, label: string): void {
+	if (bytes.length === 0) throw new Error(`"${label}" is empty. Choose a file with something in it.`);
 	if (bytes.length > MAX_IMPORT_BYTES) {
-		throw new Error(`"${label}" is larger than 50 MB. Split it or compress it first.`);
+		throw new Error(`"${label}" is larger than 100 MB. Keep it in a project's files instead, which can link to it.`);
+	}
+	if (familyOf(label) === "pdf" && !isPdfBytes(bytes)) {
+		throw new Error(`"${label}" is not a PDF, though its name says so. Check the file and add it again.`);
 	}
 }
 
 /** The only place a window-supplied source is turned into bytes. */
-function resolve(source: ImportSource, db: Db): Resolved {
+export function resolveSource(source: ImportSource, db: Db): Resolved {
 	if (source.kind === "bytes") {
 		const bytes = Buffer.from(source.data);
-		const fileName = basename(String(source.fileName ?? "")).trim() || "Document.pdf";
-		checkPdf(bytes, fileName);
+		const fileName = basename(String(source.fileName ?? "")).trim() || "Document";
+		checkFile(bytes, fileName);
 		return {
 			bytes,
 			fileName,
 			fileDate: validDate(source.fileDate, new Date().toISOString()),
+			mediaType: mediaTypeFor(fileName),
 			source: source.via === "picker" ? "picker" : "drop",
 			mailAttachmentId: null,
 			threadClientId: null,
@@ -98,11 +121,12 @@ function resolve(source: ImportSource, db: Db): Resolved {
 		if (!row) throw new Error("That attachment does not exist.");
 		const { path, filename } = attachmentPath(source.attachmentId, db);
 		const bytes = readFileSync(path);
-		checkPdf(bytes, filename);
+		checkFile(bytes, filename);
 		return {
 			bytes,
 			fileName: filename,
 			fileDate: validDate(row.messageDate ?? row.internalDate, new Date().toISOString()),
+			mediaType: mediaTypeFor(filename),
 			source: "mail",
 			mailAttachmentId: source.attachmentId,
 			threadClientId: row.clientId,
@@ -112,69 +136,55 @@ function resolve(source: ImportSource, db: Db): Resolved {
 }
 
 /** For the agent's tools, which name a file on this machine. */
-function resolvePath(sourcePath: string): Resolved {
+export function resolvePath(sourcePath: string): Resolved {
 	const label = basename(sourcePath);
 	if (!existsSync(sourcePath) || !statSync(sourcePath).isFile()) {
 		throw new Error(`Could not find "${label}". Check the file still exists at that location.`);
 	}
+	if (statSync(sourcePath).size > MAX_IMPORT_BYTES) {
+		throw new Error(`"${label}" is larger than 100 MB. Keep it in a project's files instead, which can link to it.`);
+	}
 	const bytes = readFileSync(sourcePath);
-	checkPdf(bytes, label);
+	checkFile(bytes, label);
 	return {
 		bytes,
 		fileName: label,
 		fileDate: validDate(statSync(sourcePath).mtime.toISOString(), new Date().toISOString()),
+		mediaType: mediaTypeFor(label),
 		source: "agent",
 		mailAttachmentId: null,
 		threadClientId: null,
 	};
 }
 
-function titleOf(fileName: string): string {
-	return fileName.replace(/\.pdf$/i, "").trim() || "Document";
+/** A title from a file name: the name without its extension. The tile says what kind it is. */
+export function titleOf(fileName: string): string {
+	const extension = extensionOf(fileName);
+	const base = extension ? fileName.slice(0, -(extension.length + 1)) : fileName;
+	return base.trim() || "Document";
 }
 
 /**
- * The live document with this title in the same place: under the same client,
- * or, for one with no client, under the same project, or among the documents
- * kept under nothing. Compared the way a person would.
+ * Which existing documents the file looks like: the same bytes, the same
+ * words with a signature or a stamp added, or the same name in the place it is
+ * going to.
  */
-function documentTitled(place: { clientId: string | null; projectId: string | null }, title: string, db: Db) {
-	const wanted = title.trim().toLowerCase();
-	const where = place.clientId
-		? eq(documents.clientId, place.clientId)
-		: place.projectId
-			? and(isNull(documents.clientId), eq(documents.projectId, place.projectId))
-			: and(isNull(documents.clientId), isNull(documents.projectId));
-	return (
-		db
-			.select({ id: documents.id, title: documents.title })
-			.from(documents)
-			.where(and(where, isNull(documents.deletedAt)))
-			.all()
-			.find((row) => row.title.trim().toLowerCase() === wanted) ?? null
-	);
-}
-
-/**
- * Which existing documents the file looks like: the same bytes, the same text
- * with a signature or a stamp added, or, for the client it is going to, the
- * same name.
- */
-async function analyse(file: Resolved, clientId: string | null, db: Db): Promise<ImportAnalysis> {
+export async function analyse(
+	file: Resolved,
+	placeInput: { clientId?: string | null; projectId?: string | null },
+	db: Db,
+): Promise<ImportAnalysis> {
 	const hash = versions.hashBytes(file.bytes);
-	const text = await extractText(file.bytes);
+	const text = await matchText(file.bytes, file.fileName);
 
 	const best = new Map<string, { score: number; identical: boolean }>();
 	for (const row of versions.fingerprints(db)) {
 		const identical = row.fileHash === hash;
-		const score = identical
-			? 1
-			: text && row.textContent
-				? (() => {
-						const match = compareText(text, row.textContent);
-						return match.same ? match.score : 0;
-					})()
-				: 0;
+		let score = identical ? 1 : 0;
+		if (!identical && text && row.textContent) {
+			const match = compareText(text, row.textContent);
+			score = match.same ? match.score : 0;
+		}
 		if (score === 0) continue;
 		const current = best.get(row.documentId);
 		if (!current || identical || score > current.score) {
@@ -182,9 +192,12 @@ async function analyse(file: Resolved, clientId: string | null, db: Db): Promise
 		}
 	}
 
+	// The place it is going to: the one asked for, or the mail thread's client.
+	const asked = placeInput.clientId || placeInput.projectId;
+	const place = resolvePlace(asked ? placeInput : { clientId: file.threadClientId }, db);
+
 	const defaultTitle = titleOf(file.fileName);
-	const wantedClient = clientId ?? file.threadClientId;
-	const named = wantedClient ? documentTitled({ clientId: wantedClient, projectId: null }, defaultTitle, db) : null;
+	const named = documentTitled(place, defaultTitle, db);
 	const ids = [...best.keys(), ...(named && !best.has(named.id) ? [named.id] : [])];
 
 	const matches: ImportMatch[] = [];
@@ -197,11 +210,14 @@ async function analyse(file: Resolved, clientId: string | null, db: Db): Promise
 			title: record.title,
 			clientId: record.clientId,
 			clientName: record.clientName,
+			projectId: record.projectId,
 			score: found?.score ?? 0,
 			identical: found?.identical ?? false,
-			reason: found ? "text" : "name",
+			reason: found ? (found.identical ? "bytes" : "text") : "name",
+			latestVersion: record.latestVersion,
 		});
 	}
+	const wantedClient = place.clientId;
 	matches.sort(
 		(a, b) =>
 			Number(b.identical) - Number(a.identical) ||
@@ -212,54 +228,79 @@ async function analyse(file: Resolved, clientId: string | null, db: Db): Promise
 	return {
 		fileName: file.fileName,
 		defaultTitle,
+		availableTitle: availableTitle(place, defaultTitle, db),
 		suggestedClientId: wantedClient ?? matches[0]?.clientId ?? null,
 		matches: matches.slice(0, MAX_MATCHES),
 		fileDate: file.fileDate,
+		mediaType: file.mediaType,
+		byteSize: file.bytes.length,
 	};
 }
 
-export async function analyseImport(
-	input: { source: ImportSource; clientId?: string | null },
-	db: Db = getDb(),
-): Promise<ImportAnalysis> {
-	return analyse(resolve(input.source, db), input.clientId ?? null, db);
+export async function analyseImport(input: AnalyseImportInput, db: Db = getDb()): Promise<ImportAnalysis> {
+	return analyse(resolveSource(input.source, db), input, db);
 }
 
 export async function analysePath(
-	input: { sourcePath: string; clientId?: string | null },
+	input: { sourcePath: string; clientId?: string | null; projectId?: string | null },
 	db: Db = getDb(),
 ): Promise<ImportAnalysis> {
-	return analyse(resolvePath(input.sourcePath), input.clientId ?? null, db);
+	return analyse(resolvePath(input.sourcePath), input, db);
 }
 
-async function createDocument(
+/** Writes the bytes under a name the service builds, keeping the file's own extension. */
+function store(title: string, suffix: string, file: Resolved): string {
+	// The stored name comes from the title through fileNameFor, never from the
+	// name the file arrived with, so "../" in either cannot leave the folder.
+	const destination = join(documentStorageDir(), fileNameFor(title, suffix, extensionOf(file.fileName)));
+	writeFileSync(destination, file.bytes);
+	return destination;
+}
+
+async function recordFile(documentId: string, file: Resolved, path: string, db: Db): Promise<DocumentVersion> {
+	return versions.record(
+		{
+			documentId,
+			kind: "imported",
+			source: file.source,
+			pdfPath: path,
+			fileName: file.fileName,
+			mediaType: file.mediaType,
+			byteSize: file.bytes.length,
+			fileDate: file.fileDate,
+			fileHash: versions.hashBytes(file.bytes),
+			textContent: await matchText(file.bytes, file.fileName),
+			mailAttachmentId: file.mailAttachmentId,
+		},
+		db,
+	);
+}
+
+export async function createDocument(
 	file: Resolved,
-	input: { clientId?: string | null; title?: string; projectId?: string | null; issuedOn?: string },
+	input: {
+		clientId?: string | null;
+		title?: string;
+		projectId?: string | null;
+		issuedOn?: string;
+	},
 	db: Db,
-): Promise<DocumentRecord> {
-	const owner = resolveOwner(input, db);
+): Promise<{ record: DocumentRecord; version: DocumentVersion }> {
+	const place = resolvePlace(input, db);
 
 	const title = input.title?.trim() || titleOf(file.fileName);
 	// Compared case-insensitively and trimmed, because "Contract.pdf" and
 	// "contract.pdf " are the same file to the person who dropped both. A
 	// deleted document does not count, so removing one frees its name again.
-	if (documentTitled(owner, title, db)) {
-		const where = owner.clientName ?? owner.projectName;
-		throw new Error(
-			`${where ? `${where} already has` : "There is already"} a document named "${title}". Add the file as a new version of it, or give it another name.`,
-		);
-	}
+	assertTitleFree(place, title, db);
 
-	// The stored name comes from the title through fileNameFor, never from the
-	// name the file arrived with, so "../" in either cannot leave the folder.
-	const destination = join(documentStorageDir(), fileNameFor(title, "-import"));
-	writeFileSync(destination, file.bytes);
+	const destination = store(title, "-import", file);
 
 	const [row] = db
 		.insert(documents)
 		.values({
-			clientId: owner.clientId,
-			projectId: owner.projectId,
+			clientId: place.clientId,
+			projectId: place.projectId,
 			templateId: null,
 			templateVersion: null,
 			title,
@@ -272,37 +313,42 @@ async function createDocument(
 		.returning()
 		.all();
 
-	versions.record(
-		{
-			documentId: row!.id,
-			kind: "imported",
-			source: file.source,
-			pdfPath: destination,
-			fileName: file.fileName,
-			fileDate: file.fileDate,
-			fileHash: versions.hashBytes(file.bytes),
-			textContent: await extractText(file.bytes),
-			mailAttachmentId: file.mailAttachmentId,
-		},
-		db,
-	);
-
+	const version = await recordFile(row!.id, file, destination, db);
 	const record = await get(row!.id, db);
 	if (!record) throw new Error("The document was written but could not be read back.");
-	return record;
+	return { record, version };
 }
 
 /** A new document from a file the window handed over. */
 export async function importFile(input: ImportFileInput, db: Db = getDb()): Promise<DocumentRecord> {
-	return createDocument(resolve(input.source, db), input, db);
+	return (await createDocument(resolveSource(input.source, db), input, db)).record;
+}
+
+/**
+ * A new document from contents an agent has rather than a file on this
+ * machine: text, or bytes in base64. The same import as a paste of text or a
+ * picture in the window, which reaches it through Add files.
+ */
+export async function createFile(input: CreateFileInput, db: Db = getDb()): Promise<DocumentRecord> {
+	const fileName = String(input.fileName ?? "").trim();
+	if (!fileName) throw new Error("A file needs a name with its extension, such as Notities.txt.");
+	const hasText = typeof input.text === "string";
+	const hasBytes = typeof input.dataBase64 === "string";
+	if (hasText === hasBytes) throw new Error("Give the file's text or its bytes in base64, one of the two.");
+	const data = hasText ? new Uint8Array(Buffer.from(input.text!, "utf8")) : new Uint8Array(Buffer.from(input.dataBase64!, "base64"));
+	if (data.byteLength === 0) throw new Error(`"${fileName}" is empty. Give it some contents first.`);
+	return importFile(
+		{ source: { kind: "bytes", fileName, data }, clientId: input.clientId ?? null, projectId: input.projectId ?? null },
+		db,
+	);
 }
 
 /**
  * A new document from a file on this machine, for the agent. Copied in, never
  * moved and never deleted, and the copy is what the record points at.
  */
-export async function importPdf(input: ImportDocumentInput, db: Db = getDb()): Promise<DocumentRecord> {
-	return createDocument(resolvePath(input.sourcePath), input, db);
+export async function importPath(input: ImportDocumentInput, db: Db = getDb()): Promise<DocumentRecord> {
+	return (await createDocument(resolvePath(input.sourcePath), input, db)).record;
 }
 
 async function appendVersion(documentId: string, file: Resolved, db: Db): Promise<DocumentVersion> {
@@ -315,22 +361,7 @@ async function appendVersion(documentId: string, file: Resolved, db: Db): Promis
 		throw new Error(`This exact file is already version ${existing.number} of ${record.title}.`);
 	}
 
-	const destination = join(documentStorageDir(), fileNameFor(record.title, "-versie"));
-	writeFileSync(destination, file.bytes);
-	return versions.record(
-		{
-			documentId,
-			kind: "imported",
-			source: file.source,
-			pdfPath: destination,
-			fileName: file.fileName,
-			fileDate: file.fileDate,
-			fileHash: hash,
-			textContent: await extractText(file.bytes),
-			mailAttachmentId: file.mailAttachmentId,
-		},
-		db,
-	);
+	return recordFile(documentId, file, store(record.title, "-versie", file), db);
 }
 
 /**
@@ -339,7 +370,7 @@ async function appendVersion(documentId: string, file: Resolved, db: Db): Promis
  * newest.
  */
 export async function addVersion(input: AddVersionInput, db: Db = getDb()): Promise<DocumentVersion> {
-	return appendVersion(input.documentId, resolve(input.source, db), db);
+	return appendVersion(input.documentId, resolveSource(input.source, db), db);
 }
 
 export async function addVersionFromPath(
@@ -350,6 +381,35 @@ export async function addVersionFromPath(
 }
 
 /**
+ * A mail attachment kept as a document, any kind of file (decision 75). The
+ * window asks `analyseImport` first with the attachment as the source and shows
+ * what it looks like; this is the answer: `versionOf` adds it to that document,
+ * otherwise it becomes a document of its own in the place given, or, with no
+ * place, under the client the conversation is linked to.
+ */
+export async function importFromMail(input: ImportFromMailInput, db: Db = getDb()): Promise<ImportFromMailResult> {
+	const file = resolveSource({ kind: "attachment", attachmentId: input.attachmentId }, db);
+	if (input.versionOf) {
+		const version = await appendVersion(input.versionOf, file, db);
+		const document = await get(input.versionOf, db);
+		if (!document) throw new Error("The version was written but the document could not be read back.");
+		return { document, version, addedAsVersion: true };
+	}
+	const asked = input.clientId || input.projectId;
+	const { record, version } = await createDocument(
+		file,
+		{
+			...(asked
+				? { clientId: input.clientId, projectId: input.projectId }
+				: { clientId: file.threadClientId }),
+			title: input.title,
+		},
+		db,
+	);
+	return { document: record, version, addedAsVersion: false };
+}
+
+/**
  * A PDF attached to a mail from this machine with "Add to documents" ticked,
  * kept once the mail has gone and not before. Kept under the mail's client and
  * project; when the two do not fit together, under the client alone.
@@ -357,6 +417,9 @@ export async function addVersionFromPath(
  * The same bytes already kept anywhere are not kept twice, and a file named
  * like a document in the same place becomes a new version of it, because
  * sending "Offerte.pdf" again is sending the next version of the offer.
+ *
+ * Still PDFs only: anything else a message carries is kept as a project file
+ * (decision 49), and the composer says so.
  */
 export async function keepSentFile(
 	input: {
@@ -370,11 +433,15 @@ export async function keepSentFile(
 ): Promise<DocumentRecord> {
 	const bytes = Buffer.from(input.data);
 	const fileName = basename(input.fileName).trim() || "Document.pdf";
-	checkPdf(bytes, fileName);
+	if (!isPdfBytes(bytes)) {
+		throw new Error(`"${fileName}" is not a PDF. Choose a file that starts with a PDF header.`);
+	}
+	checkFile(bytes, fileName);
 	const file: Resolved = {
 		bytes,
 		fileName,
 		fileDate: validDate(input.fileDate, new Date().toISOString()),
+		mediaType: "application/pdf",
 		source: "mail",
 		mailAttachmentId: null,
 		threadClientId: null,
@@ -401,5 +468,5 @@ export async function keepSentFile(
 		if (!record) throw new Error("The version was written but the document could not be read back.");
 		return record;
 	}
-	return createDocument(file, { clientId: owner.clientId, projectId: owner.projectId }, db);
+	return (await createDocument(file, { clientId: owner.clientId, projectId: owner.projectId }, db)).record;
 }

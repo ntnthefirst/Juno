@@ -11,6 +11,7 @@ import { ACTION_LABELS, ACTION_TONES, formatArgs, formatWhen, parseMailPreview, 
 import { ToolTile } from "./ToolTile";
 import { toolVisual, VERBS } from "./tool-visual";
 import { useNow } from "./use-now";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type RequestListProps = {
 	actions: AgentAction[] | null;
@@ -63,7 +64,7 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 			</div>
 		);
 	}
-	if (actions === null) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (actions === null) return <RowsSkeleton rows={4} />;
 
 	const pending = actions.filter((action) => action.state === "pending");
 	const answered = actions.filter((action) => action.state !== "pending");
@@ -85,8 +86,8 @@ export function RequestList({ actions, error, onChanged, onNotice }: RequestList
 						<div>
 							<p className="font-[var(--weight-medium)]">Nothing is waiting</p>
 							<p className="mt-0.5 max-w-[60ch] text-dense text-[var(--ink-muted)]">
-								When an agent asks for something that changes a record or sends a mail, it appears here as
-								a card you can read, and nothing happens until you approve it.
+								When an agent asks for something that needs your approval, it appears here as a card you
+								can read, and nothing happens until you approve it.
 							</p>
 						</div>
 					</div>

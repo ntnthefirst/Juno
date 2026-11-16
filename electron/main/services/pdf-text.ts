@@ -6,27 +6,14 @@
  * printed again. What is compared is the text, not the bytes, because a
  * signature, a stamp or a re-save changes every byte and not one word.
  *
- * No Electron import. pdf.js runs here as a plain library with no worker and
- * no fonts loaded, which is enough to read the text layer.
+ * No Electron import. pdf.js itself runs in the file worker (`file-reader.ts`),
+ * so a long PDF does not hold the main process while its text is read.
  */
+import { MAX_PDF_TEXT_LENGTH } from "./file-jobs";
+import { readInWorker } from "./file-reader";
 
 /** A contract is a few thousand words. Anything past this is not needed to recognise it. */
-const MAX_TEXT_LENGTH = 200_000;
-const MAX_PAGES = 60;
-
-type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
-
-let loaded: Promise<PdfJs> | null = null;
-
-/**
- * pdf.js ships as an ES module. The main process compiles to CommonJS, which
- * turns this import into a require, and Electron's Node can require an ES
- * module that has no top-level await, which pdf.js does not.
- */
-function pdfjs(): Promise<PdfJs> {
-	loaded ??= import("pdfjs-dist/legacy/build/pdf.mjs");
-	return loaded;
-}
+const MAX_TEXT_LENGTH = MAX_PDF_TEXT_LENGTH;
 
 /**
  * The text of a PDF, normalised for comparing: lower case, one space between
@@ -34,34 +21,19 @@ function pdfjs(): Promise<PdfJs> {
  * which only means it cannot be matched, never that it cannot be imported.
  */
 export async function extractText(bytes: Uint8Array): Promise<string | null> {
-	const lib = await pdfjs();
-	const task = lib.getDocument({
-		data: new Uint8Array(bytes),
-		disableFontFace: true,
-		useSystemFonts: false,
-		verbosity: lib.VerbosityLevel.ERRORS,
-	});
-	try {
-		const pdf = await task.promise;
-		const parts: string[] = [];
-		let length = 0;
-		for (let number = 1; number <= Math.min(pdf.numPages, MAX_PAGES); number += 1) {
-			const content = await (await pdf.getPage(number)).getTextContent();
-			for (const item of content.items) {
-				const text = "str" in item ? item.str : "";
-				if (text.length === 0) continue;
-				parts.push(text);
-				length += text.length + 1;
-			}
-			if (length > MAX_TEXT_LENGTH) break;
-		}
-		const text = normalise(parts.join(" "));
-		return text.length > 0 ? text.slice(0, MAX_TEXT_LENGTH) : null;
-	} catch {
-		return null;
-	} finally {
-		await task.destroy().catch(() => undefined);
-	}
+	const text = await readText(bytes);
+	if (text === null) return null;
+	const normalised = normalise(text);
+	return normalised.length > 0 ? normalised.slice(0, MAX_TEXT_LENGTH) : null;
+}
+
+/**
+ * The text of a PDF as it reads, a line per line of the page, for a preview
+ * and for an agent. Null when there is none, as above.
+ */
+export async function readText(bytes: Uint8Array): Promise<string | null> {
+	// A PDF the worker could not finish is one without text Juno can read, as before.
+	return readInWorker({ kind: "pdf-text" }, bytes).catch(() => null);
 }
 
 export function normalise(text: string): string {

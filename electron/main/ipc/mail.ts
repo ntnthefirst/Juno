@@ -119,7 +119,8 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.threads.linkProject", (_event, id: string, projectId: string | null) =>
 		threads.linkProject(id, projectId),
 	);
-	ipcMain.handle("mail.threads.countForClient", (_event, clientId: string) =>
+	ipcMain.handle("mail.threads.countDrafts", (_event, accountId?: string) => threads.countDrafts(accountId));
+	ipcMain.handle("mail.threads.countForClient",(_event, clientId: string) =>
 		threads.countForClient(clientId),
 	);
 
@@ -164,12 +165,6 @@ export function registerMailIpc(): void {
 
 	ipcMain.handle("mail.messages.get", (_event, id: string) => threads.getMessage(id));
 	ipcMain.handle("mail.messages.body", (_event, id: string) => threads.getBody(id));
-
-	ipcMain.handle("mail.attachments.reveal", (_event, id: string) => {
-		// Revealed, never opened. An attachment is an attacker's file until a
-		// person decides otherwise, and that decision happens in the file manager.
-		shell.showItemInFolder(threads.attachmentPath(id).path);
-	});
 
 	// Opened only for the short list of plain document, image and media types
 	// the service allows. The window offers it for a trusted sender or mail
@@ -269,7 +264,7 @@ export function registerMailIpc(): void {
 	// an agent has no tool that reaches the queue at all (../mcp/mail-outbox.ts
 	// writes drafts and nothing else).
 	ipcMain.handle("mail.outbox.send", (_event, id: string) => outbox.requestSend(id));
-	ipcMain.handle("mail.outbox.cancel", (_event, id: string) => outbox.cancel(id));
+	ipcMain.handle("mail.outbox.returnToDraft", (_event, id: string) => outbox.returnToDraft(id));
 	ipcMain.handle("mail.outbox.retry", (_event, id: string) => outbox.retry(id));
 	ipcMain.handle("mail.outbox.remove", (_event, id: string) => outbox.remove(id));
 	// Files from this machine. No MCP twin on purpose: adding one takes a file
@@ -306,7 +301,7 @@ export function registerMailIpc(): void {
 			if (!window.isDestroyed()) window.webContents.send("mail.agentDraft", message);
 		}
 	});
-	// A draft autosaved, edited, cancelled, retried or removed: the sender never
+	// A draft autosaved, edited, returned to a draft, retried or removed: the sender never
 	// touches these, so without this an open outbox list never learned about
 	// them.
 	outbox.onChange((message) => {

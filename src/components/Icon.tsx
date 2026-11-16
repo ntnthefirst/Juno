@@ -55,6 +55,7 @@ import {
 	HashtagIcon,
 	HomeIcon,
 	FolderOpenIcon,
+	FolderPlusIcon,
 	GlobeAltIcon,
 	InboxIcon,
 	InformationCircleIcon,
@@ -171,7 +172,10 @@ export type IconName =
 	| "design"
 	| "web"
 	| "docs"
+	| "folder"
+	| "folder-add"
 	| "folder-open"
+	| "sign"
 	| "image"
 	| "star"
 	| "grid"
@@ -290,6 +294,8 @@ function glyph(paths: ReactNode): Glyph {
 }
 
 const DRAWN = {
+	// A signature over its line, for signing a document.
+	sign: glyph(<path d="M3.5 15.5c1.5-4 3-6.5 4.2-6.5 1.6 0 .2 6.6 1.8 6.6 1.3 0 2.1-3.6 3.3-3.6 1 0 1 2.4 2.2 2.4.8 0 1.5-.9 2.2-1.9M3.5 19.5h17" />),
 	text: glyph(<path d="M5 6.5V5h14v1.5M12 5v14m-2.5 0h5" />),
 	button: glyph(
 		<>
@@ -534,7 +540,10 @@ const ICONS: Record<IconName, Glyph> = {
 	design: PaintBrushIcon,
 	web: GlobeAltIcon,
 	docs: BookOpenIcon,
+	folder: FolderIcon,
+	"folder-add": FolderPlusIcon,
 	"folder-open": FolderOpenIcon,
+	sign: DRAWN.sign,
 	image: PhotoIcon,
 	star: StarIcon,
 	grid: Squares2X2Icon,

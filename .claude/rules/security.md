@@ -47,6 +47,14 @@ May not expose, ever:
   after `safeLinkHref` (https or mailto), the same check the page was saved with.
   `pages.chooseImage` takes no path at all: the file is picked in a dialog in the main
   process and copied into the page's own folder (decision 68). Neither is an MCP tool.
+  `documents.preview` takes an id (a document, a version, a mail attachment, a project
+  file) or bytes the window is about to add, never a path, and hands back a PDF's bytes,
+  text, cells, or an `app://preview/<token>` address the main process issued with its own
+  policy (decision 76). `documents.open` and `documents.openVersion` open a copy Juno
+  wrote under the documents folder (`.working/`), never a version's own file and never
+  a path from the window, and a signed or older version's copy is read only (decision 75).
+  Neither has an MCP tool. Convert to PDF hands Word two paths the service built, as
+  environment variables of a script whose text never changes (decision 77).
   There are two exceptions, and both fetch through `services/public-fetch.ts`: https
   only, a public host on every redirect, a size cap counted as the body arrives, and
   a time limit. `mail.templates.loadPicture` is reached only after the person

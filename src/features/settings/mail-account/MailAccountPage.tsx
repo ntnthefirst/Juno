@@ -18,6 +18,8 @@ type MailAccountPageProps = {
 	/** The account's own form: servers, password, sync. */
 	onEdit: () => void;
 	onSaved: (message: string) => void;
+	/** Changes when another screen asks for a new rule on this account; the rule page opens. */
+	startNewRule?: number;
 };
 
 /**
@@ -25,8 +27,13 @@ type MailAccountPageProps = {
  * file its new mail, and what those rules have done. It is a page in the
  * settings window (decision 30), and a rule is a page on top of it.
  */
-export function MailAccountPage({ account, onBack, onEdit, onSaved }: MailAccountPageProps) {
-	const [rule, setRule] = useState<{ rule: MailRule | null } | null>(null);
+export function MailAccountPage({ account, onBack, onEdit, onSaved, startNewRule = 0 }: MailAccountPageProps) {
+	const [rule, setRule] = useState<{ rule: MailRule | null } | null>(() => (startNewRule ? { rule: null } : null));
+	const [seenRuleStart, setSeenRuleStart] = useState(startNewRule);
+	if (startNewRule !== seenRuleStart) {
+		setSeenRuleStart(startNewRule);
+		if (startNewRule) setRule({ rule: null });
+	}
 
 	const loadFolders = useCallback(() => window.juno.mail.folders.list(account.id), [account.id]);
 	const loadRules = useCallback(() => window.juno.mail.rules.list(account.id), [account.id]);

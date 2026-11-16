@@ -16,7 +16,7 @@ import type {
 	MailAddress,
 } from "../../shared/types";
 import { getDb, type Db } from "../db";
-import { documents, mailOutbox, mailOutboxAttachments } from "../db/schema";
+import { documents, mailMessages, mailOutbox, mailOutboxAttachments } from "../db/schema";
 import * as versions from "./document-versions";
 
 const SOURCE_WORDS: Record<DocumentVersionSource, string> = {
@@ -26,6 +26,9 @@ const SOURCE_WORDS: Record<DocumentVersionSource, string> = {
 	mail: "From a mail",
 	sign: "Signed in Juno",
 	agent: "Added by the agent",
+	external: "Saved in another app",
+	convert: "Converted in Juno",
+	duplicate: "Copied from another document",
 };
 
 /** `to_json` is written by the outbox, but a bad row must not take the timeline down with it. */
@@ -63,15 +66,27 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 				title: "Generated from a template",
 				detail: null,
 				versionId: version.id,
+				threadId: null,
 			});
 		} else if (version.kind === "imported") {
 			entries.push({
 				id: `version:${version.id}`,
 				kind: "imported",
 				at: version.fileDate,
-				title: "Imported as a PDF",
+				title: version.mediaType === "application/pdf" ? "Imported as a PDF" : "Added as a file",
 				detail: [source, version.fileName].filter(Boolean).join(", "),
 				versionId: version.id,
+				threadId: null,
+			});
+		} else if (version.kind === "edited" || version.kind === "converted") {
+			entries.push({
+				id: `version:${version.id}`,
+				kind: version.kind,
+				at: version.fileDate,
+				title: version.kind === "edited" ? "Edited outside Juno" : "Converted to PDF",
+				detail: version.fileName,
+				versionId: version.id,
+				threadId: null,
 			});
 		} else {
 			const by = version.signerName ? ` by ${version.signerName}` : "";
@@ -82,6 +97,7 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 				title: version.kind === "signed" ? `Signed digitally${by}` : `Stamped${by}`,
 				detail: version.digital ? `Certificate of ${version.digital.subject}` : null,
 				versionId: version.id,
+				threadId: null,
 			});
 		}
 	}
@@ -95,6 +111,7 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 			title: "Created",
 			detail: null,
 			versionId: null,
+			threadId: null,
 		});
 	}
 
@@ -103,6 +120,9 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 	const mails = db
 		.select({
 			id: mailOutbox.id,
+			accountId: mailOutbox.accountId,
+			messageId: mailOutbox.messageId,
+			threadId: mailOutbox.threadId,
 			state: mailOutbox.state,
 			toJson: mailOutbox.toJson,
 			sentAt: mailOutbox.sentAt,
@@ -124,6 +144,15 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 		const to = recipients(mail.toJson);
 		const where = to ? ` to ${to}` : "";
 		if (mail.state === "sent" && mail.sentAt) {
+			// A reply knows its conversation; a new message is found by the copy kept in Sent.
+			const threadId =
+				mail.threadId ??
+				db
+					.select({ threadId: mailMessages.threadId })
+					.from(mailMessages)
+					.where(and(eq(mailMessages.accountId, mail.accountId), eq(mailMessages.messageId, mail.messageId), isNull(mailMessages.deletedAt)))
+					.get()?.threadId ??
+				null;
 			entries.push({
 				id: `mail:${mail.id}`,
 				kind: "emailed",
@@ -131,6 +160,7 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 				title: `Sent by email${where}`,
 				detail: mail.subject || null,
 				versionId: null,
+				threadId,
 			});
 		} else if ((mail.state === "queued" || mail.state === "sending") && mail.queuedAt) {
 			entries.push({
@@ -140,6 +170,7 @@ export async function timeline(documentId: string, db: Db = getDb()): Promise<Do
 				title: `Waiting to be emailed${where}`,
 				detail: mail.subject || null,
 				versionId: null,
+				threadId: null,
 			});
 		}
 	}

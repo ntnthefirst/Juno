@@ -5,6 +5,7 @@ import { Icon } from "../../components/Icon";
 import { messageOf } from "../../lib/errors";
 import { requestOpen } from "../../lib/open-entity";
 import { listAllThreads } from "../../lib/list-all-threads";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type ClientMailProps = {
 	clientId: string;
@@ -68,7 +69,7 @@ export function ClientMail({ clientId, onNewMessage }: ClientMailProps) {
 			</div>
 
 			{load.status === "loading" ? (
-				<p className="text-base text-[var(--ink-muted)]">Loading.</p>
+				<RowsSkeleton rows={4} />
 			) : load.status === "error" ? (
 				<p data-selectable className="text-base text-[var(--risk)]">
 					{load.message}

@@ -35,6 +35,7 @@ import {
 } from "../db/schema";
 import { cleanIds, requireAll, reviewOf, type BulkReview } from "./bulk";
 import { requireClient } from "./clients";
+import { carryProjectToClient } from "./document-place";
 import {
 	checkChosenFolder,
 	defaultFolderFor,
@@ -284,6 +285,15 @@ export async function update(id: string, patch: ProjectPatch, db: Db = getDb()):
 	const values: Partial<typeof projects.$inferInsert> = { ...patch, updatedAt: now() };
 	if (patch.name !== undefined) values.name = requireName(patch.name);
 
+	const priorClientId =
+		patch.clientId !== undefined
+			? (db
+					.select({ clientId: projects.clientId })
+					.from(projects)
+					.where(and(eq(projects.id, id), isNull(projects.deletedAt)))
+					.get()?.clientId ?? null)
+			: null;
+
 	// A project only holds where it is now, so the move is written down for its timeline.
 	const before =
 		patch.statusId !== undefined
@@ -294,12 +304,17 @@ export async function update(id: string, patch: ProjectPatch, db: Db = getDb()):
 					.get()
 			: undefined;
 
-	const row = db
-		.update(projects)
-		.set(values)
-		.where(and(eq(projects.id, id), isNull(projects.deletedAt)))
-		.returning()
-		.get();
+	// Its documents follow a new client, in the same transaction, or not at all.
+	const row = db.transaction((tx) => {
+		const changed = tx
+			.update(projects)
+			.set(values)
+			.where(and(eq(projects.id, id), isNull(projects.deletedAt)))
+			.returning()
+			.get();
+		if (changed && patch.clientId !== undefined && patch.clientId !== priorClientId) carryProjectToClient(id, tx);
+		return changed;
+	});
 	if (!row) throw new Error(`No project with id "${id}" to update. It may have been deleted.`);
 	if (before && before.statusId !== (patch.statusId ?? null)) {
 		db.insert(projectStatusChanges)

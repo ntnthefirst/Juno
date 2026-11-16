@@ -18,12 +18,14 @@ import type {
 	AgentAction,
 	AutomationRun,
 	ChildClosedInfo,
+	DocumentsChanged,
 	LockState,
 	MailOutboxMessage,
 	MailSyncStatus,
 	ProjectRun,
 	RunningTimer,
 	SettingsSection,
+	SettingsTarget,
 	ThemeSetting,
 	UpdateStatus,
 } from "./shared/types";
@@ -48,12 +50,15 @@ const api: JunoApi = {
 		setIcons: (icons) => call("menu.setIcons", icons),
 	},
 	window: {
-		openSettings: (section) => call("window.openSettings", section),
+		openSettings: (section, target) => call("window.openSettings", section, target),
 		closeSettings: () => call("window.closeSettings"),
 		isSettingsOpen: () => call("window.isSettingsOpen"),
 		onShowSection: (listener) => {
-			const handler = (_event: Electron.IpcRendererEvent, section: SettingsSection) =>
-				listener(section);
+			const handler = (
+				_event: Electron.IpcRendererEvent,
+				section: SettingsSection,
+				target: SettingsTarget | null,
+			) => listener(section, target ?? null);
 			ipcRenderer.on("settings.showSection", handler);
 			return () => {
 				ipcRenderer.off("settings.showSection", handler);
@@ -229,7 +234,6 @@ const api: JunoApi = {
 			restore: (id) => call("projects.assets.restore", id),
 			reorder: (projectId, orderedIds) => call("projects.assets.reorder", projectId, orderedIds),
 			open: (id) => call("projects.assets.open", id),
-			reveal: (id) => call("projects.assets.reveal", id),
 		},
 
 		commands: {
@@ -453,52 +457,41 @@ const api: JunoApi = {
 		month: (month) => call("briefing.month", month),
 	},
 
-	templates: {
-		list: () => call("templates.list"),
-		get: (id) => call("templates.get", id),
-		create: (input) => call("templates.create", input),
-		update: (id, patch) => call("templates.update", id, patch),
-		setReviewed: (id, reviewed) => call("templates.setReviewed", id, reviewed),
-		remove: (id) => call("templates.remove", id),
-		preview: (input) => call("templates.preview", input),
-		renderPdf: (input) => call("templates.renderPdf", input),
-		savePdf: (input) => call("templates.savePdf", input),
-		pickDocx: () => call("templates.pickDocx"),
-		importDocx: (input) => call("templates.importDocx", input),
-		assets: {
-			list: (templateId) => call("templates.assets.list", templateId),
-			add: (input) => call("templates.assets.add", input),
-			remove: (id) => call("templates.assets.remove", id),
-		},
-		components: {
-			list: () => call("templates.components.list"),
-			get: (id) => call("templates.components.get", id),
-			create: (input) => call("templates.components.create", input),
-			update: (id, patch) => call("templates.components.update", id, patch),
-			remove: (id) => call("templates.components.remove", id),
-			usedBy: (id) => call("templates.components.usedBy", id),
-			detach: (input) => call("templates.components.detach", input),
-			renderPdf: (input) => call("templates.components.renderPdf", input),
-			assets: {
-				list: (componentId) => call("templates.components.assets.list", componentId),
-				add: (input) => call("templates.components.assets.add", input),
-				remove: (id) => call("templates.components.assets.remove", id),
-			},
-		},
-	},
-
 	documents: {
 		list: (query) => call("documents.list", query),
 		link: (id, input) => call("documents.link", id, input),
 		get: (id) => call("documents.get", id),
-		generate: (input) => call("documents.generate", input),
 		pickPdfs: () => call("documents.pickPdfs"),
+		pickFiles: () => call("documents.pickFiles"),
 		analyseImport: (input) => call("documents.analyseImport", input),
+		compareText: (input) => call("documents.compareText", input),
 		importFile: (input) => call("documents.importFile", input),
 		addVersion: (input) => call("documents.addVersion", input),
+		importFromMail: (input) => call("documents.importFromMail", input),
+		threadAttachments: (threadId) => call("documents.threadAttachments", threadId),
+		saveThreadAttachments: (input) => call("documents.saveThreadAttachments", input),
+		listUnfiled: () => call("documents.listUnfiled"),
+		move: (id, input) => call("documents.move", id, input),
+		rename: (id, title) => call("documents.rename", id, title),
+		duplicate: (id) => call("documents.duplicate", id),
+		clipboard: {
+			copy: (ids, mode) => call("documents.clipboard.copy", ids, mode),
+			paste: (place) => call("documents.clipboard.paste", place),
+		},
+		copyTo: (id, target) => call("documents.copyTo", id, target),
+		convertPdf: (id) => call("documents.convertPdf", id),
+		preview: (source) => call("documents.preview", source),
+		open: (id) => call("documents.open", id),
+		startDrag: (ids) => call("documents.startDrag", ids),
+		onChanged: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, change: DocumentsChanged) => listener(change);
+			ipcRenderer.on("documents.changed", handler);
+			return () => {
+				ipcRenderer.off("documents.changed", handler);
+			};
+		},
 		versions: (documentId) => call("documents.versions", documentId),
 		openVersion: (versionId) => call("documents.openVersion", versionId),
-		revealVersion: (versionId) => call("documents.revealVersion", versionId),
 		openCertificate: (versionId) => call("documents.openCertificate", versionId),
 		readPdf: (id) => call("documents.readPdf", id),
 		readVersion: (versionId) => call("documents.readVersion", versionId),
@@ -514,7 +507,6 @@ const api: JunoApi = {
 		sign: (input) => call("documents.sign", input),
 		signatures: (documentId) => call("documents.signatures", documentId),
 		openPdf: (id) => call("documents.openPdf", id),
-		revealPdf: (id) => call("documents.revealPdf", id),
 	},
 
 	signingCertificate: {
@@ -528,7 +520,7 @@ const api: JunoApi = {
 		get: (id) => call("reminders.get", id),
 		create: (input) => call("reminders.create", input),
 		update: (id, patch) => call("reminders.update", id, patch),
-		complete: (id, note) => call("reminders.complete", id, note),
+		complete: (id, note, dueOn) => call("reminders.complete", id, note, dueOn),
 		snooze: (id, until) => call("reminders.snooze", id, until),
 		reopen: (id) => call("reminders.reopen", id),
 		remove: (id) => call("reminders.remove", id),
@@ -613,6 +605,7 @@ const api: JunoApi = {
 			linkClient: (id, clientId) => call("mail.threads.linkClient", id, clientId),
 			unlinkClient: (id) => call("mail.threads.unlinkClient", id),
 			linkProject: (id, projectId) => call("mail.threads.linkProject", id, projectId),
+			countDrafts: (accountId) => call("mail.threads.countDrafts", accountId),
 			countForClient: (clientId) => call("mail.threads.countForClient", clientId),
 		},
 		file: {
@@ -637,7 +630,6 @@ const api: JunoApi = {
 			body: (id) => call("mail.messages.body", id),
 		},
 		attachments: {
-			reveal: (id) => call("mail.attachments.reveal", id),
 			open: (id) => call("mail.attachments.open", id),
 			save: (id) => call("mail.attachments.save", id),
 		},
@@ -690,7 +682,7 @@ const api: JunoApi = {
 			replySeed: (messageId, mode) => call("mail.outbox.replySeed", messageId, mode),
 			replySeedOutgoing: (outboxId, mode) => call("mail.outbox.replySeedOutgoing", outboxId, mode),
 			send: (id) => call("mail.outbox.send", id),
-			cancel: (id) => call("mail.outbox.cancel", id),
+			returnToDraft: (id) => call("mail.outbox.returnToDraft", id),
 			retry: (id) => call("mail.outbox.retry", id),
 			remove: (id) => call("mail.outbox.remove", id),
 			files: {

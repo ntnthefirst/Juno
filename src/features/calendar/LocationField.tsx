@@ -15,7 +15,7 @@ const SOURCE_LABEL: Record<LocationSuggestion["source"], string> = {
 };
 
 const CONTROL =
-	"w-full rounded-[var(--radius-sm)] border border-transparent bg-[var(--sunken)] px-3 py-2 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--accent)] focus:bg-[var(--surface)]";
+	"h-10 w-full rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-base text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--focus)] focus:shadow-[inset_0_0_0_1px_var(--focus)]";
 
 const OPTION =
 	"flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-dense hover:bg-[var(--accent-soft)]";
@@ -101,8 +101,18 @@ export function LocationField({ value, onChange }: LocationFieldProps) {
 	const showCard = open && query.length >= MIN_QUERY_LENGTH;
 
 	return (
-		<div ref={containerRef} className="relative">
-			<label htmlFor={id} className="mb-1 block text-sm text-[var(--ink-muted)]">
+		<div
+			ref={containerRef}
+			className="relative"
+			onKeyDown={(event) => {
+				// Escape closes the suggestions and nothing else. Left alone, the page
+				// around the field reads it as leaving the form.
+				if (event.key !== "Escape" || !showCard) return;
+				event.preventDefault();
+				setOpen(false);
+			}}
+		>
+			<label htmlFor={id} className="mb-1.5 block text-sm font-[var(--weight-medium)] text-[var(--ink)]">
 				Location
 			</label>
 			<input

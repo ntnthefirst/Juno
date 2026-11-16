@@ -1,7 +1,9 @@
 import type { ProjectAsset } from "@shared/types";
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Icon } from "../../components/Icon";
 import { MenuButton, type MenuItem } from "../../components/Menu";
-import { ASSET_ICONS, assetImageUrl, formatBytes, pathTail } from "./format";
+import { useClickGate } from "../../lib/click-timing";
+import { assetImageUrl, formatBytes, pathTail } from "./format";
 
 type AssetListProps = {
 	assets: ProjectAsset[];
@@ -9,8 +11,10 @@ type AssetListProps = {
 	coverAssetId: string | null;
 	/** Off draws every file as a row with an icon, images included. */
 	previews: boolean;
+	/** One click: the full preview. */
+	onPreview: (asset: ProjectAsset) => void;
+	/** A double click: the file in its own app. */
 	onOpen: (asset: ProjectAsset) => void;
-	onReveal: (asset: ProjectAsset) => void;
 	onSetCover: (asset: ProjectAsset | null) => void;
 	onRemove: (asset: ProjectAsset) => void;
 };
@@ -18,11 +22,11 @@ type AssetListProps = {
 function menuFor(
 	asset: ProjectAsset,
 	isCover: boolean,
-	props: Pick<AssetListProps, "onOpen" | "onReveal" | "onSetCover" | "onRemove">,
+	props: Pick<AssetListProps, "onPreview" | "onOpen" | "onSetCover" | "onRemove">,
 ): MenuItem[] {
 	return [
+		{ id: "preview", label: "Open preview", icon: "visible", onSelect: () => props.onPreview(asset) },
 		{ id: "open", label: "Open", icon: "external", onSelect: () => props.onOpen(asset) },
-		{ id: "reveal", label: "Show in folder", icon: "folder-open", onSelect: () => props.onReveal(asset) },
 		{
 			id: "cover",
 			label: isCover ? "Stop using as the cover" : "Use as the cover",
@@ -57,12 +61,14 @@ export function AssetList({
 	assets,
 	coverAssetId,
 	previews,
+	onPreview,
 	onOpen,
-	onReveal,
 	onSetCover,
 	onRemove,
 }: AssetListProps) {
-	const handlers = { onOpen, onReveal, onSetCover, onRemove };
+	const handlers = { onPreview, onOpen, onSetCover, onRemove };
+	// One click previews and two open, as a file does everywhere else (decision 75).
+	const clicks = useClickGate<ProjectAsset>({ single: onPreview, double: onOpen }, (a, b) => a.id === b.id);
 	const images = previews ? assets.filter((asset) => asset.kind === "image" && asset.exists) : [];
 	const rest = assets.filter((asset) => !images.includes(asset));
 
@@ -82,9 +88,9 @@ export function AssetList({
 							>
 								<button
 									type="button"
-									onClick={() => onOpen(asset)}
+									onClick={(event) => clicks.click(asset, event.detail)}
 									className="block w-full"
-									title={`Open ${asset.fileName}`}
+									title={`Preview ${asset.fileName}`}
 								>
 									<img
 										src={assetImageUrl(asset.id)}
@@ -122,13 +128,12 @@ export function AssetList({
 								className="flex items-center gap-3 border-b border-[var(--line)] px-2"
 								style={{ height: "var(--row-height)" }}
 							>
-								<span className="flex-none text-[var(--ink-faint)]">
-									<Icon name={ASSET_ICONS[asset.kind]} />
-								</span>
+								<FileTypeIcon filename={asset.fileName} mimeType={asset.mimeType ?? ""} />
 								<button
 									type="button"
-									onClick={() => onOpen(asset)}
-									className="min-w-0 flex-1 truncate text-left text-dense"
+									onClick={(event) => clicks.click(asset, event.detail)}
+									title={`Preview ${asset.fileName}`}
+									className="min-w-0 flex-1 truncate rounded-[var(--radius-sm)] text-left text-dense focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
 								>
 									{asset.fileName}
 								</button>

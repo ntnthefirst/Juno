@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { messageOf } from "../../lib/errors";
 import { Section, SectionError } from "./Section";
+import { CardSkeleton } from "../../components/CardSkeleton";
 
 type Load =
 	| { status: "loading" }
@@ -94,7 +95,7 @@ export function SignatureSection() {
 
 			<div className="mt-4">
 			{load.status === "loading" ? (
-				<p className="text-[var(--ink-muted)]">Loading.</p>
+				<CardSkeleton lines={2} framed={false} />
 			) : path === null ? (
 				<p className="text-dense text-[var(--ink-muted)]">
 					No image set. It is stamped onto a PDF when you sign it, and a transparent PNG works best.

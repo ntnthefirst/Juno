@@ -1,5 +1,6 @@
 import { isNewRecordKind, prefillFromQuery } from "@shared/new-record";
-import type { NewRecordKind, NewRecordPrefill, SettingsSection } from "@shared/types";
+import { settingsTargetFromQuery } from "@shared/settings-target";
+import type { NewRecordKind, NewRecordPrefill, SettingsSection, SettingsTarget } from "@shared/types";
 
 /**
  * Which shell this window is, read from its own URL.
@@ -11,7 +12,7 @@ import type { NewRecordKind, NewRecordPrefill, SettingsSection } from "@shared/t
  */
 export type WindowView =
 	| { kind: "main" }
-	| { kind: "settings"; section: SettingsSection | null }
+	| { kind: "settings"; section: SettingsSection | null; target: SettingsTarget | null }
 	| { kind: "setup" }
 	| { kind: "new"; record: NewRecordKind; prefill: NewRecordPrefill };
 
@@ -32,7 +33,8 @@ export function viewFromHash(hash: string): WindowView {
 	if (parts[0] === "setup") return { kind: "setup" };
 	if (parts[0] === "settings") {
 		const section = parts[1] ?? "";
-		return { kind: "settings", section: isSettingsSection(section) ? section : null };
+		if (!isSettingsSection(section)) return { kind: "settings", section: null, target: null };
+		return { kind: "settings", section, target: settingsTargetFromQuery(query) };
 	}
 	return { kind: "main" };
 }

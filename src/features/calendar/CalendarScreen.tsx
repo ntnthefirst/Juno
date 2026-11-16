@@ -1,6 +1,6 @@
 import { TitleBarSlot } from "../../app/TitleBarSlot";
 import { Segmented } from "../../components/Segmented";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	CalendarEvent,
 	CalendarItem,
@@ -19,6 +19,8 @@ import { MenuButton, type MenuItem } from "../../components/Menu";
 import { Toast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { openNewRecord, useRecordsChanged } from "../../lib/new-record";
+import { clearPending, peekPending } from "../../lib/open-entity";
+import { useLiveScreenAction, useScreenAction, type ScreenAction } from "../../lib/screen-actions";
 import { ProjectForm } from "../projects/ProjectForm";
 import { ReminderForm } from "../reminders/ReminderForm";
 import { SnoozeDialog } from "../reminders/SnoozeDialog";
@@ -87,7 +89,21 @@ export function CalendarScreen() {
 	const [today, setToday] = useState<string | null>(null);
 	const [nowMinute, setNowMinute] = useState<number | null>(null);
 	const [view, setView] = useState<ViewKind>("month");
-	const [anchor, setAnchor] = useState<string | null>(null);
+	// An event pressed somewhere else (the overview, a client's timeline, an
+	// agent's request) arrives as a request, read once as this screen mounts.
+	// The calendar opens on its day and shows it in the panel once it has read
+	// that range.
+	const [requested] = useState(() => peekPending("event"));
+	// Taken once it is read: left waiting, it opened again when the screen
+	// was brought up afresh from the rail.
+	useEffect(() => {
+		clearPending();
+		return clearPending;
+	}, []);
+	const focus = useRef<{ id: string; date: string | null } | null>(
+		requested ? { id: requested.id, date: requested.date ?? null } : null,
+	);
+	const [anchor, setAnchor] = useState<string | null>(() => requested?.date ?? null);
 	const [showReminders, setShowReminders] = useState(true);
 	const [showDeadlines, setShowDeadlines] = useState(true);
 	// The calendars Juno subscribes to, for the layers in the "..." menu.
@@ -106,6 +122,16 @@ export function CalendarScreen() {
 	// Which way the range last moved, for the agenda's entrance. Held here
 	// because nothing below can tell a step forward from a jump to today.
 	const [direction, setDirection] = useState<-1 | 1>(1);
+	// Import a calendar file, from the New menu: where the calendar is, or once it
+	// has mounted when it was asked for from elsewhere. The other items in that
+	// menu need nothing from this screen (lib/screen-actions.ts).
+	function runNew(action: ScreenAction): boolean {
+		if (action !== "import-calendar") return false;
+		void importIcs();
+		return true;
+	}
+	useScreenAction("calendar", (action) => void runNew(action));
+	useLiveScreenAction("calendar", runNew);
 
 	// The clock is impure, so it is read here and kept current by the minute.
 	useEffect(() => {
@@ -150,7 +176,18 @@ export function CalendarScreen() {
 		let cancelled = false;
 		fetchItems()
 			.then((items) => {
-				if (!cancelled) setLoad({ status: "ready", items, view, anchor, dates });
+				if (cancelled) return;
+				setLoad({ status: "ready", items, view, anchor, dates });
+				// The event asked for, once a range that holds its day has been read.
+				const wanted = focus.current;
+				if (wanted?.date && dates.includes(wanted.date)) {
+					focus.current = null;
+					const matches = items.filter(
+						(item): item is CalendarOccurrence => item.kind === "event" && item.eventId === wanted.id,
+					);
+					const hit = matches.find((item) => item.startLocal.slice(0, 10) === wanted.date) ?? matches[0];
+					if (hit) setDetail(hit);
+				}
 			})
 			.catch((cause: unknown) => {
 				if (!cancelled) setLoad({ status: "error", message: messageOf(cause) });
@@ -159,6 +196,34 @@ export function CalendarScreen() {
 			cancelled = true;
 		};
 	}, [fetchItems, from, version, view, anchor, dates]);
+
+	// A request that named the event without its day: the day is the event's own start.
+	useEffect(() => {
+		if (!requested || requested.date) return;
+		let cancelled = false;
+		window.juno.calendar
+			.get(requested.id)
+			.then((event) => {
+				if (cancelled) return;
+				if (!event) {
+					focus.current = null;
+					setNotice("That event is no longer on the calendar.");
+					return;
+				}
+				const date = event.startLocal.slice(0, 10);
+				focus.current = { id: event.id, date };
+				setAnchor(date);
+				// Read again even when the calendar already shows that day, since
+				// the first read finished before the day was known.
+				setVersion((v) => v + 1);
+			})
+			.catch((cause: unknown) => {
+				if (!cancelled) setNotice(messageOf(cause));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [requested]);
 
 	const refresh = useCallback(() => setVersion((v) => v + 1), []);
 	// A new-record window saved something, so the grid reads again.
@@ -323,7 +388,7 @@ export function CalendarScreen() {
 	function complete(item: CalendarReminderItem) {
 		setDetail(null);
 		void run(async () => {
-			const done = await window.juno.reminders.complete(item.reminderId);
+			const done = await window.juno.reminders.complete(item.reminderId, null, item.dueOn);
 			setNotice(
 				done.completedAt ? `${item.title} done.` : `${item.title} done. Next one is due ${formatDate(done.dueOn)}.`,
 			);
@@ -500,13 +565,7 @@ export function CalendarScreen() {
 	}
 
 	const overflowItems: MenuItem[] = [
-		{
-			id: "new-reminder",
-			label: "New reminder",
-			icon: "reminders",
-			onSelect: () => anchor && createReminderAt(view === "month" ? (today ?? anchor) : anchor),
-		},
-		{ id: "import", label: "Import", icon: "import", separatorBefore: true, onSelect: () => void importIcs() },
+		{ id: "import", label: "Import", icon: "import", onSelect: () => void importIcs() },
 		{
 			id: "export",
 			label: "Export",
@@ -610,7 +669,7 @@ export function CalendarScreen() {
 						dates={load.dates}
 						today={today}
 						placed={placed}
-						nowMinute={nowMinute}
+						nowMinute={load.dates.includes(today) ? nowMinute : null}
 						onOpen={setDetail}
 						onCreateAt={createAt}
 						onMove={move}

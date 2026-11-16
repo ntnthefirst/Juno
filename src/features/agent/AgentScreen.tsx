@@ -8,6 +8,7 @@ import { AutomationList } from "./AutomationList";
 import { EntityChip } from "./EntityChip";
 import { formatLogWhen, logOutcome, logWho } from "./format";
 import { RequestList } from "./RequestList";
+import { RowsSkeleton } from "../../components/RowsSkeleton";
 
 type Tab = "requests" | "log" | "automations";
 
@@ -71,8 +72,9 @@ export function AgentScreen() {
 					<div>
 						<h1 className="text-h1">Agent</h1>
 						<p className="mt-1.5 max-w-[880px] text-lg text-[var(--ink-muted)]">
-							Juno exposes everything it can do to an agent on this machine. Reading happens freely; anything
-							that changes a record or sends a mail waits here for you.
+							Juno exposes everything it can do to an agent on this machine. Reading happens freely. Anything
+							that sends, signs, files or deletes waits here for you, and so does a change to a record unless
+							you allow it under Settings &gt; MCP &gt; Permissions.
 						</p>
 					</div>
 				</div>
@@ -153,7 +155,7 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 			</div>
 		);
 	}
-	if (rows === null) return <p className="text-[var(--ink-muted)]">Loading.</p>;
+	if (rows === null) return <RowsSkeleton rows={4} />;
 
 	return (
 		<div>
@@ -179,7 +181,8 @@ function AuditLog({ onNotice }: { onNotice: (message: string) => void }) {
 							const view = views.get(row.id) ?? null;
 							const outcome = logOutcome(row);
 							return (
-								<tr key={row.id} className="h-[52px] border-b border-[var(--line)] align-middle hover:bg-[var(--hover)]">
+								// A log line is read, not pressed: only the record chip in it opens anything.
+								<tr key={row.id} className="h-[52px] border-b border-[var(--line)] align-middle">
 									<td className="tabular py-2 pr-4 text-dense text-[var(--ink-muted)]">{formatLogWhen(row.createdAt)}</td>
 									<td className="py-2 pr-4">
 										<span className={`font-mono text-sm ${row.result === "read" ? "text-[var(--ink-muted)]" : ""}`}>{row.toolName}</span>

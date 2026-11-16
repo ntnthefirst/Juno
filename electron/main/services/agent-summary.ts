@@ -34,8 +34,6 @@ const NOUNS: [prefix: string, noun: string][] = [
 	["projects.delete_link", "project link"],
 	["projects.", "project"],
 	["documents.", "document"],
-	["templates.components.", "component"],
-	["templates.", "document template"],
 	["mail.templates.", "mail template"],
 	["mail.accounts.", "mail account"],
 	["mail.folders.", "mail folder"],
@@ -78,8 +76,6 @@ const VERBS: Record<string, string> = {
 	run: "Run",
 	import: "Import",
 	import_ics: "Import",
-	import_docx: "Import",
-	generate: "Generate",
 	link: "Link",
 	add_version: "Add a version to",
 	render_pdf: "Make a PDF of",
@@ -89,6 +85,10 @@ const VERBS: Record<string, string> = {
 	set_sync: "Change what syncs for",
 	reorder: "Reorder",
 	rename: "Rename",
+	move: "Move",
+	copy: "Copy",
+	convert_pdf: "Make a PDF of",
+	import_from_mail: "Keep a mail attachment as",
 	cancel: "Cancel",
 	hide: "Hide",
 	hide_item: "Hide",
@@ -155,10 +155,14 @@ function special(toolName: string, args: Record<string, unknown>, db: Db): strin
 			return named ? `Send a mail from the template "${named}"` : "Send a mail from a template";
 		case "mail.sync":
 			return "Fetch new mail";
-		case "documents.generate":
-			return named ? `Make a document from the template "${named}"` : "Make a document from a template";
 		case "documents.import":
 			return "Import a document";
+		case "documents.create_file":
+			return typeof args.file_name === "string" && args.file_name ? `Keep "${clip(args.file_name)}" as a document` : "Keep a file as a document";
+		case "documents.import_from_thread":
+			return named ? `Keep the attachments of "${named}" as documents` : "Keep a conversation's attachments as documents";
+		case "documents.list_from_thread":
+			return named ? `Look at the attachments of "${named}"` : "Look at a conversation's attachments";
 		case "time.start":
 			return named ? `Start the timer on "${named}"` : "Start a timer";
 		case "time.stop":

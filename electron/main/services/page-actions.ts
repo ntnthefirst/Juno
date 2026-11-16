@@ -7,7 +7,7 @@ import { readFileSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { dialog, shell } from "electron";
 import { safeLinkHref, type ImageBlock } from "../../shared/blocks";
-import { MAX_ASSET_BYTES } from "./document-template-assets";
+import { MAX_ASSET_BYTES } from "./page-images";
 import * as pageImages from "./page-images";
 
 /**

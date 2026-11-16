@@ -3,11 +3,11 @@ import { assertSignable } from "./documents";
 
 describe("assertSignable", () => {
 	it("refuses a document generated from an unreviewed template", () => {
-		expect(() => assertSignable({ isSpecimen: true })).toThrow(/has not been reviewed/);
+		expect(() => assertSignable({ isSpecimen: true })).toThrow(/was never reviewed/);
 	});
 
 	it("says what to do about it, not just that it refused", () => {
-		expect(() => assertSignable({ isSpecimen: true })).toThrow(/mark it as reviewed/);
+		expect(() => assertSignable({ isSpecimen: true })).toThrow(/your own checked text as a new document/);
 	});
 
 	it("allows a document from a reviewed template", () => {

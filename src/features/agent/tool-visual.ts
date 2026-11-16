@@ -35,7 +35,6 @@ const DOMAINS: [prefix: string, icon: IconName][] = [
 	["contacts.", "client"],
 	["projects.", "projects"],
 	["documents.", "documents"],
-	["templates.", "templates"],
 	["calendar.", "calendar"],
 	["reminders.", "reminders"],
 	["settings.", "settings"],

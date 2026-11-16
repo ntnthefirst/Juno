@@ -14,7 +14,6 @@ export const KIND_ICONS: Record<AgentEntityKind, IconName> = {
 	mailMessage: "mail",
 	mailDraft: "drafts",
 	mailTemplate: "templates",
-	documentTemplate: "templates",
 	document: "documents",
 	reminder: "reminders",
 	event: "calendar",
@@ -31,8 +30,7 @@ const KIND_SCREENS: Partial<Record<AgentEntityKind, Extract<OpenTarget, { kind: 
 /** Whether a record can be opened from here at all. A deleted one cannot. */
 export function isOpenable(entity: AgentEntityRef): boolean {
 	if (entity.gone) return false;
-	// Document templates were removed (decision 82): an older log entry names one with nowhere to open.
-	return entity.kind !== "automation" && entity.kind !== "documentTemplate";
+	return entity.kind !== "automation";
 }
 
 /**

@@ -19,7 +19,6 @@ import {
 	mailDir,
 	outboxFilesDir,
 	projectsDir,
-	templateAssetsDir,
 	userDataDir,
 } from "./main/db/paths";
 import { safeStorageCredentialStore } from "./main/credential-store";
@@ -36,12 +35,10 @@ import * as documentWorking from "./main/services/document-working";
 import { configureWorkingCopies } from "./main/services/document-working";
 import { configurePreview, forgetPreviews } from "./main/services/file-preview";
 import { convertWithWord, wordInstalled } from "./main/services/word-convert";
-import { ensureTemplatesSeeded } from "./main/services/document-templates";
 import { configureDocumentStorage } from "./main/services/documents";
 import { apply as applyDocumentsFolder, configureDocumentsFolder } from "./main/services/documents-folder";
 import { configurePageImages } from "./main/services/page-images";
 import { configureOutboxFiles, prune as pruneOutboxFiles } from "./main/services/mail-outbox-files";
-import { configureTemplateAssets } from "./main/services/document-template-assets";
 import { configureProjectStorage } from "./main/services/project-storage";
 import * as projectRunner from "./main/services/project-runner";
 import * as notifications from "./main/services/notifications";
@@ -149,7 +146,6 @@ if (!app.requestSingleInstanceLock()) {
 			wordAvailable: wordInstalled,
 			convertWithWord,
 		});
-		configureTemplateAssets(templateAssetsDir());
 		configureProjectStorage(projectsDir());
 		configureMailThreads(mailDir());
 		configureOutboxFiles(outboxFilesDir());
@@ -214,11 +210,6 @@ if (!app.requestSingleInstanceLock()) {
 					`${seeded.setsCreated} set(s), ${seeded.itemsCreated} new item(s), ` +
 					`${seeded.itemsUpdated} updated`,
 			);
-		}
-
-		const templateSeed = await ensureTemplatesSeeded(db);
-		if (templateSeed.created || templateSeed.updated) {
-			console.log(`Templates: ${templateSeed.created} created, ${templateSeed.updated} updated`);
 		}
 
 		const mailTemplateSeed = await ensureMailTemplatesSeeded(db);

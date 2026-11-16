@@ -1,13 +1,10 @@
 /**
- * Declared inputs: what a document or mail template asks for beyond what a
- * client and project record already answer.
+ * Declared inputs: what a mail template asks for beyond what a client and
+ * project record already answer: the storage shape, the validation and the
+ * key rule.
  *
- * Shared by document-templates.ts and mail-templates.ts, so the storage shape,
- * the validation and the key rule are the same for both rather than drifting
- * apart the moment one of them is edited on its own.
- *
- * Pure: no Electron import, no database import. Both template services and
- * their tests can use it without a connection.
+ * Pure: no Electron import, no database import, so the template service and
+ * its tests can use it without a connection.
  */
 import { INPUT_SOURCES } from "../../shared/input-sources";
 import type { InputSource, TemplateInput, TemplateInputKind } from "../../shared/types";

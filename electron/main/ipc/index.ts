@@ -33,7 +33,6 @@ import { registerRecentIpc } from "./recent";
 import { registerSearchIpc } from "./search";
 import { registerSettingsIpc } from "./settings";
 import { registerSuggestionsIpc } from "./suggestions";
-import { registerTemplatesIpc } from "./templates";
 import { registerTimeIpc } from "./time";
 import { registerUpdatesIpc } from "./updates";
 import { registerWindowIpc } from "./window";
@@ -61,7 +60,6 @@ export function registerAllIpc(): void {
 	registerRecentIpc();
 	registerReferenceIpc();
 	registerBackupIpc();
-	registerTemplatesIpc();
 	registerDocumentsIpc();
 	registerSigningCertificateIpc();
 	registerRemindersIpc();

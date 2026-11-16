@@ -48,7 +48,6 @@ describe("what a bare id means", () => {
 		expect(kindOfId("mail.send")).toBe("mailDraft");
 		expect(kindOfId("clients.update")).toBe("client");
 		expect(kindOfId("reminders.snooze")).toBe("reminder");
-		expect(kindOfId("templates.update")).toBe("documentTemplate");
 		expect(kindOfId("mail.templates.update")).toBe("mailTemplate");
 		// An id passed to clients.emails.update is an email row, not a client.
 		expect(kindOfId("clients.emails.update")).toBeNull();

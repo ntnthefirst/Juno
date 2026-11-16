@@ -74,28 +74,10 @@ import type {
 	CalendarRangeQuery,
 	DocumentRecord,
 	DocumentSignature,
-	DocumentCanvasPdf,
-	DocumentCanvasRender,
-	DocumentTemplate,
-	DocumentTemplateAsset,
-	ComponentUse,
-	DetachInput,
-	DetachResult,
-	DocumentComponent,
-	DocumentComponentAsset,
-	DocumentComponentAssetInput,
-	DocumentComponentInput,
-	DocumentComponentPatch,
-	DocumentComponentRender,
-	DocumentTemplateAssetInput,
-	DocumentTemplateInput,
-	DocumentTemplatePatch,
 	DocumentTimelineEntry,
 	VersionUse,
-	GenerateDocumentInput,
 	CompareTextInput,
 	TextComparison,
-	GenerateDocumentResult,
 	AddVersionInput,
 	DocumentVersion,
 	ImportAnalysis,
@@ -824,71 +806,11 @@ export interface JunoApi {
 		month(month: string): Promise<Briefing>;
 	};
 
-	templates: {
-		list(): Promise<DocumentTemplate[]>;
-		get(id: string): Promise<DocumentTemplate | null>;
-		create(input: DocumentTemplateInput): Promise<DocumentTemplate>;
-		update(id: string, patch: DocumentTemplatePatch): Promise<DocumentTemplate>;
-		/**
-		 * Marks the text as checked. Separate from update on purpose: reviewing is
-		 * a claim about the content and must never be a side effect of an edit.
-		 */
-		setReviewed(id: string, reviewed: boolean): Promise<DocumentTemplate>;
-		remove(id: string): Promise<DocumentTemplate>;
-		/** Renders against a client without storing anything, for the editor. */
-		preview(input: {
-			bodyHtml: string;
-			clientId?: string | null;
-			projectId?: string | null;
-			isSpecimen: boolean;
-		}): Promise<{ html: string; missing: string[] }>;
-		/**
-		 * A canvas template, or a draft of one, filled in with values typed by
-		 * hand and printed. Stores nothing.
-		 */
-		renderPdf(input: DocumentCanvasRender): Promise<DocumentCanvasPdf>;
-		/** Saves that PDF where the person chooses, for no client. The path, or null when cancelled. */
-		savePdf(input: DocumentCanvasRender): Promise<string | null>;
-		/** Asks for a .docx and makes a template of it. Null when cancelled. */
-		pickDocx(): Promise<DocumentTemplate | null>;
-		/** Makes a template of a .docx dropped on the window. */
-		importDocx(input: { fileName: string; data: Uint8Array }): Promise<DocumentTemplate>;
-		assets: {
-			list(templateId: string): Promise<DocumentTemplateAsset[]>;
-			/** Stores a picture for the template. The same bytes twice give the same picture. */
-			add(input: DocumentTemplateAssetInput): Promise<DocumentTemplateAsset>;
-			remove(id: string): Promise<DocumentTemplateAsset>;
-		};
-		/**
-		 * Pieces of a page made once and placed in many templates (decision 65).
-		 * Deleting one that a template still places is refused with the names.
-		 */
-		components: {
-			list(): Promise<DocumentComponent[]>;
-			get(id: string): Promise<DocumentComponent | null>;
-			create(input: DocumentComponentInput): Promise<DocumentComponent>;
-			update(id: string, patch: DocumentComponentPatch): Promise<DocumentComponent>;
-			remove(id: string): Promise<DocumentComponent>;
-			/** The templates that place it, directly or through another component. */
-			usedBy(id: string): Promise<ComponentUse[]>;
-			/** Copies a placed component into a draft of a template and drops the link. Stores nothing. */
-			detach(input: DetachInput): Promise<DetachResult>;
-			/** The component alone on a page, printed. Stores nothing. */
-			renderPdf(input: DocumentComponentRender): Promise<DocumentCanvasPdf>;
-			assets: {
-				list(componentId: string): Promise<DocumentComponentAsset[]>;
-				add(input: DocumentComponentAssetInput): Promise<DocumentComponentAsset>;
-				remove(id: string): Promise<DocumentComponentAsset>;
-			};
-		};
-	};
-
 	documents: {
 		list(query?: { clientId?: string; projectId?: string }): Promise<DocumentRecord[]>;
 		/** Keeps it under a client, a project, both or neither. A project brings its client. */
 		link(id: string, input: { clientId: string | null; projectId: string | null }): Promise<DocumentRecord>;
 		get(id: string): Promise<DocumentRecord | null>;
-		generate(input: GenerateDocumentInput): Promise<GenerateDocumentResult>;
 		/** Opens the file picker and hands back the chosen PDFs as bytes. Empty when cancelled. */
 		pickPdfs(): Promise<PickedPdf[]>;
 		/** Opens the file picker for any kind of file and hands the chosen files back as bytes. Empty when cancelled. */

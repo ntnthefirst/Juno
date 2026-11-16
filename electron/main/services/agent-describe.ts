@@ -30,7 +30,6 @@ import {
 	clients,
 	contacts,
 	documents,
-	documentTemplates,
 	mailAccounts,
 	mailAttachments,
 	mailFolders,
@@ -59,7 +58,6 @@ const ROLES: Record<AgentEntityKind, string> = {
 	mailMessage: "Message",
 	mailDraft: "Draft",
 	mailTemplate: "Template",
-	documentTemplate: "Template",
 	document: "Document",
 	reminder: "Reminder",
 	event: "Event",
@@ -93,7 +91,6 @@ const ID_KINDS: [prefix: string, kind: AgentEntityKind][] = [
 	["mail.folders.", "mailFolder"],
 	["mail.accounts.", "mailAccount"],
 	["mail.templates.", "mailTemplate"],
-	["templates.", "documentTemplate"],
 	["contacts.", "contact"],
 	["clients.", "client"],
 	["projects.", "project"],
@@ -114,7 +111,7 @@ export function kindOfId(toolName: string): AgentEntityKind | null {
 
 function kindOfKey(toolName: string, key: string): AgentEntityKind | null {
 	if (key === "id") return kindOfId(toolName);
-	if (key === "template_id") return toolName.startsWith("templates.") ? "documentTemplate" : "mailTemplate";
+	if (key === "template_id") return "mailTemplate";
 	if (key === "parent_id") return toolName.startsWith("mail.folders.") ? "mailFolder" : null;
 	return KEY_KINDS[key] ?? null;
 }
@@ -189,10 +186,6 @@ function find(db: Db, kind: AgentEntityKind, id: string): Found {
 		}
 		case "mailTemplate": {
 			const row = db.select({ name: mailTemplates.name, deletedAt: mailTemplates.deletedAt }).from(mailTemplates).where(eq(mailTemplates.id, id)).get();
-			return row ? { label: row.name, detail: null, gone: row.deletedAt !== null } : MISSING;
-		}
-		case "documentTemplate": {
-			const row = db.select({ name: documentTemplates.name, deletedAt: documentTemplates.deletedAt }).from(documentTemplates).where(eq(documentTemplates.id, id)).get();
 			return row ? { label: row.name, detail: null, gone: row.deletedAt !== null } : MISSING;
 		}
 		case "document": {

@@ -19,9 +19,8 @@
  * that is an image, for a thumbnail. It takes an asset id and resolves the path
  * itself, so the renderer never names a file. Anything that is not an image it
  * is willing to decode is a 404 rather than a download, because a response this
- * origin serves is only ever the source of an `<img>`. A document template's
- * pictures come from the same host under `/template/<id>`, by the same rule,
- * and a page's under `/page/<page id>/<file>`.
+ * origin serves is only ever the source of an `<img>`. A page's pictures come
+ * from the same host under `/page/<page id>/<file>`, by the same rule.
  *
  * `app://preview` is a fourth, for a file's preview (decision 76), served by
  * token from services/file-preview.ts with the policy that service chose.
@@ -33,7 +32,6 @@ import { isLocked } from "./services/lock";
 import { renderBody } from "./services/mail-threads";
 import { frameCsp } from "./services/mail-sanitise";
 import * as projectAssets from "./services/project-assets";
-import * as templateAssets from "./services/document-template-assets";
 import * as pageImages from "./services/page-images";
 import { servePreview } from "./services/file-preview";
 
@@ -110,16 +108,14 @@ async function serveAsset(url: URL): Promise<Response> {
 	// Same reasoning as the mail host: the lock guard covers IPC, not a URL.
 	if (isLocked()) return new Response("Locked", { status: 423 });
 
-	const match = /^\/(file|template|component)\/([a-z0-9-]+)$/i.exec(url.pathname);
+	const match = /^\/file\/([a-z0-9-]+)$/i.exec(url.pathname);
 	const pageMatch = /^\/page\/([a-z0-9-]+)\/([a-z0-9-]+\.[a-z]+)$/i.exec(url.pathname);
 	if (!match && !pageMatch) return new Response("Not found", { status: 404 });
 
 	let file: { path: string; mimeType: string | null };
 	try {
 		if (pageMatch) file = pageImages.serve(pageMatch[1]!, pageMatch[2]!);
-		else if (match?.[1] === "template") file = templateAssets.pathOf(match[2]!);
-		else if (match?.[1] === "component") file = templateAssets.componentPathOf(match[2]!);
-		else if (match) file = projectAssets.pathOf(match[2]!);
+		else if (match) file = projectAssets.pathOf(match[1]!);
 		else return new Response("Not found", { status: 404 });
 	} catch {
 		// A missing file is an ordinary state here, not an error worth a message:

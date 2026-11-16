@@ -704,8 +704,6 @@ export interface AppSettings {
 	mailTemplateSeedVersion: number;
 	/** The same for the intros and outros a first install is given. */
 	mailBlockSeedVersion: number;
-	/** The same for document templates: 0 is never, and it tells a first install from an upgrade. */
-	documentTemplateSeedVersion: number;
 	/** The signature image stamped onto signed PDFs, or null when none is set. */
 	signaturePath: string | null;
 	/**
@@ -1549,23 +1547,6 @@ export interface MailContainer {
 	box: MailBoxStyle;
 	actions: MailAction[];
 	children: MailNode[];
-	/**
-	 * Set on a document template's container that is a component placed rather
-	 * than drawn (decision 65). Its children are not stored: they are the
-	 * component's, read when the template is drawn or printed, so editing the
-	 * component changes it here. Left out on everything else.
-	 */
-	component?: ComponentPlacement | null;
-}
-
-/**
- * What a placement holds: which component, and a value for each input it asks
- * for. A value that is exactly `{{document.<key>}}` passes one of the
- * template's own inputs through; anything else is the text itself.
- */
-export interface ComponentPlacement {
-	componentId: string;
-	values: Record<string, string>;
 }
 
 /**
@@ -1772,282 +1753,7 @@ export interface MailLayout {
 	breakpoints: MailBreakpoint[];
 }
 
-/* --------------------------------------------- document templates: the page */
-
-/** Millimetres. A page is measured the way a printer measures it. */
-export type Mm = number;
-
-export interface PageMargin {
-	top: Mm;
-	right: Mm;
-	bottom: Mm;
-	left: Mm;
-}
-
-export type LayoutAlign = "left" | "center" | "right" | "justify";
-
-/**
- * One thing on a page. A block either flows in the column inside the margin or
- * sits in a box at a position, which is the same two choices a PDF gives.
- *
- * `html` on a paragraph or a cell is the small allowed set the editor produces:
- * `strong`, `em`, `u`, `s`, `br`, `a`, and `{{ }}` placeholders. It is compiled
- * into the document, so it is sanitised on the way in.
- */
-export type LayoutBlock =
-	| { id: string; kind: "heading"; level: 1 | 2 | 3; text: string; align: LayoutAlign }
-	| { id: string; kind: "paragraph"; html: string; align: LayoutAlign }
-	| { id: string; kind: "list"; ordered: boolean; items: string[] }
-	| { id: string; kind: "image"; src: string; alt: string; widthMm: Mm; align: LayoutAlign }
-	| { id: string; kind: "spacer"; heightMm: Mm }
-	| { id: string; kind: "divider" }
-	| {
-			id: string;
-			kind: "table";
-			/** Widths are percentages of the column, and should add up to 100. */
-			columns: { header: string; widthPct: number }[];
-			rows: string[][];
-			/** A header row is drawn in bold over a rule. */
-			headerRow: boolean;
-	  }
-	| {
-			id: string;
-			kind: "signature";
-			label: string;
-			/** Where the signature image is stamped when the document is signed. */
-			widthMm: Mm;
-	  };
-
-/**
- * A block pinned to a page. `xMm` and `yMm` are from the top left corner of the
- * paper, not of the text column, because that is what a position on a page
- * means to the person placing it.
- */
-export interface LayoutBox {
-	id: string;
-	xMm: Mm;
-	yMm: Mm;
-	widthMm: Mm;
-	block: LayoutBlock;
-}
-
-export interface LayoutPage {
-	id: string;
-	/** Flows down the column inside the margin, in this order. */
-	blocks: LayoutBlock[];
-	/** Placed on the paper, over the flow. */
-	boxes: LayoutBox[];
-}
-
-/**
- * The editable shape of a document template. `bodyHtml` is compiled from this
- * on every save, so the renderer and the PDF pipeline never learn that a page
- * model exists.
- *
- * `version` is the shape of this object, not the template's own version number.
- */
-export interface DocumentLayout {
-	version: 1;
-	pageSize: "A4";
-	margin: PageMargin;
-	pages: LayoutPage[];
-}
-
-/* ------------------------------------------- document templates: the canvas */
-
-/** The paper sizes a document template can be laid out on. */
-export type PaperSize = "A3" | "A4" | "A5" | "A6" | "letter" | "legal";
-
-export type PaperOrientation = "portrait" | "landscape";
-
-export interface DocumentPaper {
-	size: PaperSize;
-	orientation: PaperOrientation;
-}
-
-/**
- * A document template laid out on the same canvas as a mail template, on paper
- * of a fixed size. Every top-level node of `layout` is a page: a section
- * exactly the size of the paper, whose padding is the page margin. The page
- * sizes are kept in step with `paper` by `normaliseCanvas`
- * (shared/paper.ts), whoever wrote the canvas.
- *
- * A canvas template fills in what it declares as inputs and nothing else: no
- * value is taken from a client, a project or the owner's details, so every
- * placeholder in it is `{{document.<input key>}}`, or a picture it carries,
- * `{{asset.<key>}}`.
- *
- * `version` is the shape of this object.
- */
-export interface DocumentCanvas {
-	version: 1;
-	paper: DocumentPaper;
-	layout: MailLayout;
-}
-
-/** A picture a document template carries, stored as a file Juno holds. */
-export interface DocumentTemplateAsset extends Standard {
-	templateId: string;
-	fileName: string;
-	mimeType: string;
-	byteSize: number;
-	/** What the canvas writes as an image's source: `{{asset.<key>}}`. */
-	token: string;
-	/** Where the window draws it from. Never a path. */
-	url: string;
-}
-
-/** A picture to add to a template: its name and its bytes. */
-export interface DocumentTemplateAssetInput {
-	templateId: string;
-	fileName: string;
-	data: Uint8Array;
-}
-
-/**
- * A canvas template, or a draft of one, filled in with values typed by hand.
- * Nothing is stored. `values` are keyed by input key.
- */
-export interface DocumentCanvasRender {
-	templateId: string;
-	/** A draft canvas and inputs to render instead of the stored ones, for the editor. */
-	canvas?: DocumentCanvas;
-	inputs?: TemplateInput[];
-	values: Record<string, string>;
-}
-
-export interface DocumentCanvasPdf {
-	pdf: Uint8Array;
-	/** Inputs with no value, by key. Each one is a marked gap in the PDF. */
-	missing: string[];
-}
-
-/* ----------------------------------- document templates: the components */
-
-/**
- * A piece of a page made once and placed in many document templates: a
- * letterhead, a signature block, a price table (decision 65). `root` is a
- * container rather than a page, with the content of the component under it.
- * It declares inputs of its own, written `{{document.<key>}}` inside it, and
- * its pictures belong to it (`DocumentComponentAsset`).
- */
-export interface DocumentComponent extends Standard {
-	name: string;
-	description: string | null;
-	root: MailContainer;
-	/** The fonts `root` uses, which a template that places it takes on. */
-	fonts: MailFont[];
-	inputs: TemplateInput[];
-	/** How many live templates place it. */
-	usedBy: number;
-}
-
-export interface DocumentComponentInput {
-	name: string;
-	description?: string | null;
-	root?: MailContainer;
-	fonts?: MailFont[];
-	inputs?: TemplateInput[];
-}
-
-export type DocumentComponentPatch = Partial<DocumentComponentInput>;
-
-/** A template that places a component, for the message that stops a delete. */
-export interface ComponentUse {
-	templateId: string;
-	templateName: string;
-}
-
-/** A picture a component keeps. The canvas writes it as `{{asset.<key>}}`, like a template's own. */
-export interface DocumentComponentAsset extends Standard {
-	componentId: string;
-	fileName: string;
-	mimeType: string;
-	byteSize: number;
-	token: string;
-	url: string;
-}
-
-export interface DocumentComponentAssetInput {
-	componentId: string;
-	fileName: string;
-	data: Uint8Array;
-}
-
-/** A component drawn on paper by itself, with its inputs at their starting values. */
-export interface DocumentComponentRender {
-	componentId: string;
-	/** A draft to print instead of the stored one, for the editor. */
-	canvas?: DocumentCanvas;
-	inputs?: TemplateInput[];
-	values: Record<string, string>;
-}
-
-/** Detaching a placed component from a draft of a template. */
-export interface DetachInput {
-	templateId: string;
-	/** The draft the editor holds. Left out, the stored canvas and inputs. */
-	canvas?: DocumentCanvas;
-	inputs?: TemplateInput[];
-	/** The id of the placement: a container with a `component`. */
-	nodeId: string;
-}
-
-export interface DetachResult {
-	canvas: DocumentCanvas;
-	inputs: TemplateInput[];
-}
-
 /* ---------------------------------------------------------------- documents */
-
-export interface DocumentTemplate extends Standard {
-	key: string;
-	name: string;
-	description: string | null;
-	language: string;
-	bodyHtml: string;
-	/**
-	 * Null means nobody has checked the text is sound. Every template starts null,
-	 * the example that ships included. See docs/templates.md.
-	 */
-	reviewedAt: Iso | null;
-	version: number;
-	isSystem: boolean;
-	customisedAt: Iso | null;
-	/** Every path the body refers to, for showing what a template needs. */
-	placeholders: string[];
-	/**
-	 * The page model the editor works on. Null means this template is HTML only,
-	 * which is true of anything written before the page editor existed, and stays
-	 * true for a template somebody prefers to keep as HTML.
-	 */
-	layout: DocumentLayout | null;
-	/**
-	 * The canvas, for a template laid out on paper of a fixed size. When set it
-	 * is what the editor shows and what the body is compiled from.
-	 */
-	canvas: DocumentCanvas | null;
-	/** What the template asks for when it is used. Empty when it asks nothing. */
-	inputs: TemplateInput[];
-}
-
-export type DocumentTemplateInput = {
-	name: string;
-	/** Left out, a fresh template gets one empty page. */
-	bodyHtml?: string;
-	key?: string;
-	description?: string | null;
-	language?: string;
-	/** Passing a layout compiles the body from it and ignores `bodyHtml`. */
-	layout?: DocumentLayout | null;
-	/** Passing a canvas compiles the body from it and ignores `layout` and `bodyHtml`. */
-	canvas?: DocumentCanvas | null;
-	inputs?: TemplateInput[];
-};
-
-export type DocumentTemplatePatch = Partial<
-	Pick<DocumentTemplateInput, "name" | "description" | "bodyHtml" | "language" | "layout" | "canvas" | "inputs">
->;
 
 export interface DocumentRecord extends Standard {
 	/** Null for a document kept under a project of the owner's own, or under nothing. */
@@ -2372,19 +2078,6 @@ export interface SaveThreadAttachmentsResult {
 	outcomes: SavedAttachment[];
 }
 
-/* ---------------------------------------------------- templates list */
-
-/** A document template as the Templates screen lists it. Opening one opens its editor. */
-export interface DocumentTemplateEntry {
-	id: string;
-	name: string;
-	updatedAt: Iso;
-	/** Null for a template nobody has reviewed: what it makes is a specimen. */
-	reviewedAt: Iso | null;
-	/** True when it is laid out on paper (decision 41), so Use fills its inputs first. */
-	hasCanvas: boolean;
-}
-
 export interface DocumentMoveInput {
 	/** The place to keep it, by the owner rule (decision 48). A project with a client brings its client. */
 	clientId?: string | null;
@@ -2482,30 +2175,6 @@ export interface FilePreviewForAgent {
 export interface AddVersionInput {
 	documentId: string;
 	source: ImportSource;
-}
-
-export interface GenerateDocumentInput {
-	/** Optional: a project with a client brings its client along. */
-	clientId?: string | null;
-	templateId: string;
-	projectId?: string | null;
-	title?: string;
-	issuedOn?: IsoDate;
-	/** Values typed for this document, such as an addendum's change summary. */
-	extras?: Record<string, string>;
-}
-
-export interface GenerateDocumentResult {
-	document: DocumentRecord;
-	/** Placeholders the template wanted and the records could not fill. */
-	missing: string[];
-	/**
-	 * Generating writes the PDF, because a document is a PDF. This is the reason
-	 * it did not, when it did not. The document itself is still saved, so the
-	 * answer is to try the PDF again from the record rather than to fill the
-	 * form in a second time.
-	 */
-	pdfError: string | null;
 }
 
 /**
@@ -3671,7 +3340,6 @@ export type AgentEntityKind =
 	| "mailMessage"
 	| "mailDraft"
 	| "mailTemplate"
-	| "documentTemplate"
 	| "document"
 	| "reminder"
 	| "event"

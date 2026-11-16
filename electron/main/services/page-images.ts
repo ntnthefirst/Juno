@@ -21,7 +21,24 @@ import { getDb, type Db } from "../db";
 import { uuidv7 } from "../db/columns";
 import { documents } from "../db/schema";
 import { documentStorageDir } from "./documents";
-import { MAX_ASSET_BYTES, sniffImage } from "./document-template-assets";
+
+/** A screenshot is a few megabytes and a photo a few more. Past this it is not a picture for a page. */
+export const MAX_ASSET_BYTES = 10 * 1024 * 1024;
+
+/**
+ * The type a file really is, read from its first bytes rather than its name.
+ * An SVG is not on the list: it is a document that can carry script.
+ */
+export function sniffImage(bytes: Uint8Array): { mime: string; extension: string } | null {
+	const starts = (...values: number[]) => values.every((value, index) => bytes[index] === value);
+	if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return { mime: "image/png", extension: "png" };
+	if (starts(0xff, 0xd8, 0xff)) return { mime: "image/jpeg", extension: "jpg" };
+	if (starts(0x47, 0x49, 0x46, 0x38)) return { mime: "image/gif", extension: "gif" };
+	if (starts(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+		return { mime: "image/webp", extension: "webp" };
+	}
+	return null;
+}
 
 const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
 

@@ -13,7 +13,6 @@ import * as compare from "./document-compare";
 import * as drag from "./document-drag";
 import { analyseImport, importFile, importFromMail } from "./document-import";
 import * as organise from "./document-organise";
-import * as templates from "./document-templates";
 import * as pages from "./pages";
 import * as projects from "./projects";
 import * as documents from "./documents";
@@ -138,14 +137,11 @@ describe("where a document is kept", () => {
 		expect(await documents.get(mine.id, db)).toMatchObject({ clientId: acme.id });
 	});
 
-	it("makes a document from a template and a page under the project they were started from, with its client", async () => {
+	it("makes a page under the project it was started from, with its client", async () => {
 		const { db, acme, website } = await setUp();
-		const template = await templates.create({ name: "Offerte" }, db);
-		const made = await documents.generate({ templateId: template.id, projectId: website.id }, db);
-		expect(made.document).toMatchObject({ clientId: acme.id, projectId: website.id });
 		const page = await pages.create({ projectId: website.id }, db);
 		expect(page.document).toMatchObject({ clientId: acme.id, projectId: website.id, sourceKind: "page" });
-		expect((await documents.list({ clientId: acme.id }, db)).map((row) => row.id).sort()).toEqual([made.document.id, page.document.id].sort());
+		expect((await documents.list({ clientId: acme.id }, db)).map((row) => row.id)).toEqual([page.document.id]);
 	});
 
 	it("brings a deleted document back where it was kept", async () => {
@@ -305,6 +301,6 @@ describe("signing a document that is not a PDF", () => {
 		);
 		await expect(documents.readPdfBytes(record.id, db)).rejects.toThrow(/Convert it to PDF first/);
 		// The specimen rule is checked first and stays.
-		expect(() => documents.assertSignable({ ...record, isSpecimen: true })).toThrow(/not been reviewed/);
+		expect(() => documents.assertSignable({ ...record, isSpecimen: true })).toThrow(/never reviewed/);
 	});
 });

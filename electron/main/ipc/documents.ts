@@ -10,7 +10,6 @@ import type {
 	AnalyseImportInput,
 	DocumentMoveInput,
 	FilePreviewSource,
-	GenerateDocumentInput,
 	ImportFileInput,
 	ImportFromMailInput,
 	SaveThreadAttachmentsInput,
@@ -70,10 +69,6 @@ export function registerDocumentsIpc(): void {
 		(_event, id: string, input: { clientId: string | null; projectId: string | null }) => documents.link(id, input),
 	);
 	ipcMain.handle("documents.get", (_event, id: string) => working.getChecked(id));
-
-	ipcMain.handle("documents.generate", (_event, input: GenerateDocumentInput) =>
-		actions.generate(input),
-	);
 
 	ipcMain.handle("documents.pickPdfs", () => actions.pickPdfs());
 	ipcMain.handle(

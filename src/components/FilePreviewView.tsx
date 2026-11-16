@@ -3,10 +3,12 @@ import type { FilePreviewSource } from "@shared/types";
 import type { PreviewState } from "../lib/use-file-preview";
 import { FileTypeIcon } from "./FileTypeIcon";
 import { Button } from "./Button";
+import { HtmlPreview } from "./HtmlPreview";
 import { ImagePreview } from "./ImagePreview";
 import { PdfBytesViewer } from "./PdfBytesViewer";
 import { PreviewSkeleton } from "./PreviewSkeleton";
 import { SheetPreview } from "./SheetPreview";
+import { TextPreview } from "./TextPreview";
 
 type FilePreviewViewProps = {
 	state: PreviewState;
@@ -66,37 +68,18 @@ export function FilePreviewView({ state, onOpen, caption, source }: FilePreviewV
 			);
 		}
 		case "html":
-			return (
-				<div className="animate-fade h-full bg-[var(--sunken)] p-6">
-					<iframe
-						title={preview.meta.name}
-						src={preview.url}
-						sandbox=""
-						referrerPolicy="no-referrer"
-						className="mx-auto block h-full w-full max-w-[860px] rounded-[var(--radius-sm)] border border-[var(--line)] shadow-[var(--shadow-popover)]"
-					/>
-				</div>
-			);
+			return <HtmlPreview url={preview.url} name={preview.meta.name} />;
 		case "text":
 			return (
-				<div className="animate-fade flex h-full min-h-0 flex-col bg-[var(--surface)]">
-					<pre
-						data-selectable
-						className="min-h-0 flex-1 overflow-auto px-8 py-6 font-mono text-dense whitespace-pre-wrap text-[var(--ink)]"
-					>
-						{preview.text}
-					</pre>
-					{preview.truncated ? (
-						<p className="flex-none border-t border-[var(--line)] px-4 py-2 text-sm text-[var(--ink-muted)]">
-							This is the first part of the file. Open it to read the rest.
-						</p>
-					) : null}
-				</div>
+				<TextPreview
+					text={preview.text}
+					note={preview.truncated ? "This is the first part of the file. Open it to read the rest." : undefined}
+				/>
 			);
 		case "table":
 			return (
 				<div className="animate-fade h-full">
-					<SheetPreview sheets={preview.sheets} truncatedSheets={preview.truncatedSheets} />
+					<SheetPreview key={preview.meta.name} sheets={preview.sheets} truncatedSheets={preview.truncatedSheets} />
 				</div>
 			);
 		case "thumbnail":

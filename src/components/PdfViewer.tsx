@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { messageOf } from "../lib/errors";
 import { openPdf, type PDFDocumentProxy } from "../lib/pdf";
-import { COMBOS, matchesCombo } from "../lib/shortcuts";
-import { useFind } from "../lib/use-find";
 import { usePreviewZoom } from "../lib/use-preview-zoom";
-import { FindBar } from "./FindBar";
 import { PdfPageView } from "./PdfPageView";
+import { PreviewFind } from "./PreviewFind";
 import { ZoomControls } from "./ZoomControls";
 
 type PdfViewerProps = {
@@ -49,7 +47,6 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 	const [paneWidth, setPaneWidth] = useState(0);
 	const [reading, setReading] = useState<Reading | null>(null);
 	const [finding, setFinding] = useState(false);
-	const [query, setQuery] = useState("");
 	const [textVersion, setTextVersion] = useState(0);
 	const pane = useRef<HTMLDivElement>(null);
 	const pages = useRef<HTMLDivElement>(null);
@@ -102,19 +99,6 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 		element.scrollTop = scrolled.current * element.scrollHeight;
 	}, [scale]);
 
-	// On the document, which hears Ctrl F before the title bar's list search does.
-	useEffect(() => {
-		if (!opened) return;
-		function onKey(event: KeyboardEvent) {
-			if (!matchesCombo(event, COMBOS.find) || document.querySelector("[role='dialog']")) return;
-			event.preventDefault();
-			setFinding(true);
-		}
-		document.addEventListener("keydown", onKey);
-		return () => document.removeEventListener("keydown", onKey);
-	}, [opened]);
-
-	const find = useFind(pages, query, finding, `${textVersion}:${scale}`);
 	const textReady = useCallback(() => setTextVersion((value) => value + 1), []);
 
 	function trackPage() {
@@ -151,24 +135,8 @@ export function PdfViewer({ fileKey, read, caption, empty }: PdfViewerProps) {
 				) : null}
 			</div>
 
-			{finding ? (
-				<div className="pointer-events-none absolute top-[60px] right-6 z-20">
-					<div className="pointer-events-auto">
-						<FindBar
-							query={query}
-							onQueryChange={setQuery}
-							count={find.count}
-							current={find.current}
-							onNext={find.next}
-							onPrevious={find.previous}
-							fieldLabel="Find in this file"
-							onClose={() => {
-								setFinding(false);
-								setQuery("");
-							}}
-						/>
-					</div>
-				</div>
+			{opened ? (
+				<PreviewFind container={pages} version={`${textVersion}:${scale}`} finding={finding} onFinding={setFinding} />
 			) : null}
 
 			<div ref={pane} onScroll={trackPage} className="min-h-0 flex-1 overflow-auto bg-[var(--sunken)]" data-pdf-pane>

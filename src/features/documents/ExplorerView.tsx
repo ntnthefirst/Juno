@@ -72,6 +72,15 @@ function columnsFor(showWhere: boolean): string {
 /** The tiles that read their picture straight away rather than when they first scroll near: what fills a screen. */
 const EAGER_TILES = 24;
 
+/**
+ * A key pressed inside an open file's preview is the preview's: its Ctrl C
+ * copies the selection or the picture, never the documents behind it. A
+ * preview is drawn in a portal, and React would still bubble its keys here.
+ */
+function inPreview(target: EventTarget | null): boolean {
+	return target instanceof Element && target.closest("[data-full-preview]") !== null;
+}
+
 const HEADERS: { label: string; column: SortColumn | null; align?: "right" }[] = [
 	{ label: "Name", column: "name" },
 	{ label: "Type", column: "type" },
@@ -179,7 +188,7 @@ export function ExplorerView({
 	}, []);
 
 	function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-		if (renamingKey !== null) return;
+		if (renamingKey !== null || inPreview(event.target)) return;
 		const command = listCommandFor(event.nativeEvent);
 		if (!command) return;
 		const focused = stop ? byKey.get(stop) : undefined;
@@ -279,7 +288,7 @@ export function ExplorerView({
 	 * with nothing selected, or nothing in it, still takes a paste.
 	 */
 	function onBlankKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-		if (event.target !== event.currentTarget || renamingKey !== null) return;
+		if (event.target !== event.currentTarget || renamingKey !== null || inPreview(event.target)) return;
 		const command = listCommandFor(event.nativeEvent);
 		if (command?.kind === "paste") {
 			event.preventDefault();

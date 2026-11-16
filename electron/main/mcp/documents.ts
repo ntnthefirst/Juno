@@ -43,10 +43,11 @@ export const documentTools: ToolDescriptor[] = [
 	},
 	{
 		name: "documents.list_unfiled",
-		title: "List documents without a client or project",
+		title: "List the owner's own files",
 		description:
-			"Documents kept under no client and no project, newest first. The owner sees them on the Overview, " +
-			"as files to give a place. Give one a place with documents.link or documents.move.",
+			"Documents kept under no client and no project, newest first: the owner's own files, listed in Files " +
+			"on the rail (a spreadsheet, the terms and conditions, a logo). Give one a client or a project with " +
+			"documents.link or documents.move.",
 		readOnly: true,
 		requiresConfirmation: false,
 		inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -97,7 +98,7 @@ export const documentTools: ToolDescriptor[] = [
 		description:
 			"Copies an existing file of any kind on this machine (a PDF, a Word file, a spreadsheet, a picture) " +
 			"into Juno and records it under a client, a project or both, the Documents tab it is listed on. One " +
-			"kept under neither is listed on the Overview as a file without a client. It has no body " +
+			"kept under neither is listed in Files, the owner's own. It has no body " +
 			"and cannot be rendered again, because it did not come from a template. A PDF can be signed; any " +
 			"other kind is converted with documents.convert_pdf first. " +
 			"Refused when the same client, or project when there is no client, already has a document with the " +

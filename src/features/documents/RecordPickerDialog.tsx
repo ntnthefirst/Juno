@@ -12,7 +12,7 @@ type RecordPickerDialogProps = {
 	title: string;
 	/** "Move here", "Copy here". */
 	confirmLabel: string;
-	/** Where the thing is now, by its option key (`client:<id>`, `project:<id>`), offered but not as the answer. */
+	/** Where the thing is now, by its option key (`files`, `client:<id>`, `project:<id>`), offered but not as the answer. */
 	current: string | null;
 	onClose: () => void;
 	onPick: (place: PlaceOption) => void;
@@ -21,8 +21,8 @@ type RecordPickerDialogProps = {
 type Load = { status: "loading" } | { status: "ready"; options: PlaceOption[] } | { status: "error"; message: string };
 
 /**
- * Where to copy or move a document to: every client with its projects under
- * it, then the projects of your own, with a filter for a long list. It is a
+ * Where to copy or move a document to: Files, every client with its projects
+ * under it, then the projects of your own, with a filter for a long list. It is a
  * question with two answers, so it is a dialog; the list inside it is the only
  * thing that needs room.
  */
@@ -96,7 +96,13 @@ export function RecordPickerDialog({ title, confirmLabel, current, onClose, onPi
 										selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--hover)]"
 									}`}
 								>
-									<Avatar name={option.name} size={18} shape="square" />
+									{option.kind === "files" ? (
+										<span className="flex w-[18px] flex-none justify-center text-[var(--accent)]">
+											<Icon name="documents" size={16} />
+										</span>
+									) : (
+										<Avatar name={option.name} size={18} shape="square" />
+									)}
 									<span className="min-w-0 flex-1 truncate">{option.name}</span>
 									{filter.trim() && option.clientName ? (
 										<span className="min-w-0 flex-none truncate text-micro text-[var(--ink-muted)]">{option.clientName}</span>

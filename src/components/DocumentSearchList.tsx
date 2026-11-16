@@ -21,9 +21,9 @@ type DocumentSearchListProps = {
 	emptyText: string;
 };
 
-/** Where it is kept, the way a row says it: "Acme / Website", or "Not linked". */
+/** Where it is kept, the way a row says it: "Acme / Website", or "Files". */
 function placeOf(record: DocumentRecord): string {
-	return [record.clientName, record.projectName].filter(Boolean).join(" / ") || "Not linked";
+	return [record.clientName, record.projectName].filter(Boolean).join(" / ") || "Files";
 }
 
 /** Every word typed appears somewhere in the title or where it is kept. */

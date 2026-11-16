@@ -15,7 +15,7 @@ describe("coverOrigin", () => {
 	it("lands every other request as a place of its own", () => {
 		expect(coverOrigin({ kind: "project", id: "p1", name: "Site", tab: "documents" }, "clients")).toBeNull();
 		expect(coverOrigin({ kind: "thread", id: "t1", messageId: null }, "projects")).toBeNull();
-		expect(coverOrigin({ kind: "screen", screen: "unfiled" }, "clients")).toBeNull();
+		expect(coverOrigin({ kind: "screen", screen: "files" }, "clients")).toBeNull();
 	});
 });
 

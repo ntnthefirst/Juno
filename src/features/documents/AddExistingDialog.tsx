@@ -122,9 +122,9 @@ export function AddExistingDialog({ scope, name, onClose, onAdded }: AddExisting
 				<DocumentSearchList
 					documents={documents}
 					search={search}
-					// Documents kept under nothing are the likeliest to belong here.
+					// Your own files, kept under nothing, are the likeliest to belong here.
 					nearby={(record) => record.clientId === null && record.projectId === null}
-					nearbyLabel="Not linked yet"
+					nearbyLabel="In Files"
 					onPick={setChosen}
 					emptyText="Every document is already here."
 				/>

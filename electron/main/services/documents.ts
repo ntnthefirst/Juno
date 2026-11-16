@@ -161,10 +161,8 @@ export async function list(
 }
 
 /**
- * The documents kept under no client and no project, newest first. Nothing in
- * the window makes one any more (decision 81), but an older install, an agent
- * or a mail attachment saved before may have, and the Overview lists them so
- * each can be given a place.
+ * The documents kept under no client and no project, newest first: the Files
+ * place on the rail, the owner's own (decision 82).
  */
 export async function listUnfiled(db: Db = getDb()): Promise<DocumentRecord[]> {
 	const rows = selectWithNames(db)

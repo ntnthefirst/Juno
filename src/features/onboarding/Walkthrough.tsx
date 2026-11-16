@@ -75,11 +75,11 @@ const STOPS: WalkthroughStop[] = [
 		target: '[data-nav="notes"]',
 	},
 	{
-		id: "documents",
-		title: "Documents",
-		body: "Every client and project has a Documents tab: any kind of file, previewed in place and signed.",
-		screen: "projects",
-		target: '[data-nav="projects"]',
+		id: "files",
+		title: "Files",
+		body: "Your own files, kept under no client and no project. Every client and project has a Documents tab that works the same way.",
+		screen: "files",
+		target: '[data-nav="files"]',
 	},
 	{
 		id: "agent",

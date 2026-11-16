@@ -149,7 +149,7 @@ export const documentFolders = sqliteTable(
 		name: text("name").notNull(),
 		/** The folder it sits in. Null when it sits directly in its place. */
 		parentId: text("parent_id").references((): AnySQLiteColumn => documentFolders.id),
-		/** The place it sits in: a client, a project, both, or neither for Unfiled. */
+		/** The place it sits in: a client, a project, both, or neither. */
 		clientId: text("client_id").references(() => clients.id),
 		projectId: text("project_id").references(() => projects.id),
 		sortOrder: integer("sort_order").notNull().default(0),

@@ -408,7 +408,7 @@ export function DocumentDetail({
 	const meta = (
 		<>
 			{facts ? `${facts} · ` : null}
-			<BelongsToLinks clientId={record.clientId} clientName={record.clientName} projectId={record.projectId} projectName={record.projectName} />
+			<BelongsToLinks clientId={record.clientId} clientName={record.clientName} projectId={record.projectId} projectName={record.projectName} none="Files" />
 		</>
 	);
 

@@ -83,7 +83,8 @@ export const SCREEN_COMBOS: Partial<Record<ScreenId, string>> = {
 	projects: "mod+4",
 	mail: "mod+5",
 	notes: "mod+6",
-	agent: "mod+7",
+	files: "mod+7",
+	agent: "mod+8",
 };
 
 export const COMBOS = {
@@ -154,7 +155,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["mod+4"], label: "Projects" },
 			{ combos: ["mod+5"], label: "Mail" },
 			{ combos: ["mod+6"], label: "Notes" },
-			{ combos: ["mod+7"], label: "Agent" },
+			{ combos: ["mod+7"], label: "Files" },
+			{ combos: ["mod+8"], label: "Agent" },
 		],
 	},
 	{

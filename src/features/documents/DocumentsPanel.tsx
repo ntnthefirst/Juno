@@ -31,7 +31,7 @@ import { DocumentDetail } from "./DocumentDetail";
 import { convertToPdf, needsConversion } from "./document-flows";
 import type { DocumentTakeoverRequest } from "./DocumentTakeover";
 import { readClipboard, writeClipboard } from "./explorer-clipboard";
-import { documentItem, documentKey, nameOf, nextSort, sortItems, type ExplorerItem, type ExplorerSort } from "./explorer-items";
+import { documentItem, documentKey, matchesSearch, nameOf, nextSort, sortItems, type ExplorerItem, type ExplorerSort } from "./explorer-items";
 import { readPrefs, writePrefs } from "./explorer-prefs";
 import { ExplorerView } from "./ExplorerView";
 import { placeKeyOf, type PlaceOption } from "./place-options";
@@ -42,8 +42,10 @@ export type { DocumentsScope } from "./use-record-documents";
 
 type DocumentsPanelProps = {
 	scope: DocumentsScope;
-	/** The client's or project's name, for "Drop to add to ..." and the way back from a preview. */
+	/** The client's or project's name, or Files, for "Drop to add to ..." and the way back from a preview. */
 	name: string;
+	/** Words from the title bar's search: only the rows that have all of them are listed. */
+	search?: string;
 	/** A document asked for from elsewhere, previewed once the list is in. */
 	openDocumentId?: string | null;
 	/** Told once that document is shown, so coming back to the tab later does not show it again. */
@@ -78,11 +80,10 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
  * one that looks like a document already here is shown beside it first.
  *
  * A client's tab lists the documents of its projects too, with the project in
- * a column of its own. The documents kept under neither are listed the same
- * way, on the page the Overview card opens, where the only thing to do with
- * one is to give it a client or a project.
+ * a column of its own. The documents kept under neither are the Files place
+ * (decision 82), drawn by this same list with Files as its heading.
  */
-export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDocument, onChanged, onTakeOver, children }: DocumentsPanelProps) {
+export function DocumentsPanel({ scope, name, search = "", openDocumentId = null, onOpenedDocument, onChanged, onTakeOver, children }: DocumentsPanelProps) {
 	const [prefs] = useState(readPrefs);
 	const { load, reload, changedOutside } = useRecordDocuments(scope);
 	const [view, setView] = useState(prefs.view);
@@ -103,11 +104,13 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 	// The document asked for from elsewhere is shown once, when the list it is in has been read.
 	const asked = useRef(openDocumentId);
 
-	const unfiled = "unfiled" in scope;
+	const files = "files" in scope;
 	const clientId = "clientId" in scope ? scope.clientId : null;
 	const projectId = "projectId" in scope ? scope.projectId : null;
-	const here = clientId ? { clientId, projectId: null } : projectId ? { clientId: null, projectId } : null;
-	const hereKey = clientId ? `client:${clientId}` : projectId ? `project:${projectId}` : null;
+	// Where what is added here is kept: this record, or no client and no project in Files.
+	const here = { clientId, projectId: clientId ? null : projectId };
+	const hereKey = clientId ? `client:${clientId}` : projectId ? `project:${projectId}` : "files";
+	const noun = files ? (["file", "files"] as const) : (["document", "documents"] as const);
 
 	useEffect(() => writePrefs({ view }), [view]);
 	useEffect(() => writePrefs({ sort }), [sort]);
@@ -116,7 +119,10 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 
 	const records = useMemo(() => (load.status === "ready" ? load.records : []), [load]);
 	const statusLabels = useMemo(() => new Map((load.status === "ready" ? load.statuses : []).map((item) => [item.id, item.label])), [load]);
-	const shown = useMemo(() => sortItems(records.map(documentItem), sort), [records, sort]);
+	const shown = useMemo(
+		() => sortItems(records.filter((record) => matchesSearch(record, search)).map(documentItem), sort),
+		[records, sort, search],
+	);
 	const keys = useMemo(() => shown.map((item) => item.key), [shown]);
 	const byKey = useMemo(() => new Map(shown.map((item) => [item.key, item])), [shown]);
 	const selection = useMemo(() => pruneSelection(heldSelection, keys), [heldSelection, keys]);
@@ -202,13 +208,9 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 		else setItems(next);
 	}
 
-	async function bring(files: File[]) {
-		if (!here) {
-			setNotice("Open a client or a project to add files to it.");
-			return;
-		}
+	async function bring(dropped: File[]) {
 		setNotice(null);
-		start(await itemsFromFiles(files));
+		start(await itemsFromFiles(dropped));
 	}
 
 	async function choose() {
@@ -232,7 +234,6 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 
 	/** A page is a document with no file, made empty here and opened to write in. */
 	async function newPage() {
-		if (!here) return;
 		try {
 			const page = await window.juno.pages.create(here);
 			changed();
@@ -302,14 +303,14 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 		setClip(readClipboard());
 		setNotice(
 			mode === "copy"
-				? `${plural(ids.length, "document", "documents")} copied. Open a client or a project and paste.`
-				: `${plural(ids.length, "document", "documents")} cut. Open a client or a project and paste to move.`,
+				? `${plural(ids.length, "document", "documents")} copied. Paste them on any Documents tab or in Files.`
+				: `${plural(ids.length, "document", "documents")} cut. Paste them where they should go.`,
 		);
 	}
 
 	async function paste() {
 		const held = readClipboard();
-		if (!held || !here) return;
+		if (!held) return;
 		// Cut and pasted where it already is: nothing moves, and the cut is let go, as in Explorer.
 		const ids = held.mode === "cut" ? held.ids.filter((id) => !byKey.has(documentKey(id))) : held.ids;
 		try {
@@ -410,12 +411,10 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 		)(event);
 	}
 
-	const blankMenu = here
-		? blankMenuFor("documents", {
-				"add-files": () => void choose(),
-				"new-page": () => void newPage(),
-			})
-		: undefined;
+	const blankMenu = blankMenuFor("documents", {
+		"add-files": () => void choose(),
+		"new-page": () => void newPage(),
+	});
 
 	const drop = useFileDrop((files) => void bring(files));
 
@@ -424,58 +423,59 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 	const count =
 		load.status !== "ready"
 			? ""
-			: selection.selected.length > 1
+			: selection.selected.length > 0
 				? `${selection.selected.length} of ${shown.length} selected`
-				: plural(shown.length, "document", "documents");
+				: plural(shown.length, noun[0], noun[1]);
 
 	const previewItem = preview ? byKey.get(documentKey(preview.id)) : undefined;
 
 	return (
 		<>
 			<section
-				{...(here ? drop.bind : {})}
-				aria-label={`Documents of ${name}`}
+				{...drop.bind}
+				aria-label={files ? "Files" : `Documents of ${name}`}
 				className={`relative rounded-[var(--radius-lg)] ${drop.dragging ? "outline-2 outline-dashed outline-offset-4 outline-[var(--accent)]" : ""}`}
 			>
 				<div className="mb-3 flex min-h-[40px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
 					<div className="flex min-w-0 items-baseline gap-2.5">
-						<h3 className="text-h3">Documents</h3>
+						<h3 className="text-h3">{files ? "Files" : "Documents"}</h3>
 						<span aria-live="polite" className="tabular text-sm text-[var(--ink-muted)]">
 							{count}
 						</span>
 					</div>
 					<div className="flex flex-none items-center gap-1">
 						<Segmented size="icons-compact" label="Layout" value={view} onChange={setView} options={VIEW_OPTIONS} />
-						{here ? (
-							<>
-								<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line)]" />
-								<MenuButton
-									size="dense"
-									ariaLabel="New document"
-									label="New"
-									icon="add"
-									items={[
-										{
-											id: "page",
-											label: "Page",
-											icon: "note",
-											onSelect: () => void newPage(),
+						<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line)]" />
+						{files ? (
+							// Files has one thing to make, a page. Bringing an existing document here is Move to.
+							<ToolbarButton icon="add" label="New" onClick={() => void newPage()} />
+						) : (
+							<MenuButton
+								size="dense"
+								ariaLabel="New document"
+								label="New"
+								icon="add"
+								items={[
+									{
+										id: "page",
+										label: "Page",
+										icon: "note",
+										onSelect: () => void newPage(),
+									},
+									{
+										id: "existing",
+										label: "An existing document",
+										icon: "link",
+										separatorBefore: true,
+										onSelect: () => {
+											setNotice(null);
+											setAddingExisting(true);
 										},
-										{
-											id: "existing",
-											label: "An existing document",
-											icon: "link",
-											separatorBefore: true,
-											onSelect: () => {
-												setNotice(null);
-												setAddingExisting(true);
-											},
-										},
-									]}
-								/>
-								<ToolbarButton icon="import" label="Add files" onClick={() => void choose()} />
-							</>
-						) : null}
+									},
+								]}
+							/>
+						)}
+						<ToolbarButton icon="import" label="Add files" onClick={() => void choose()} />
 					</div>
 				</div>
 
@@ -505,7 +505,7 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 								statusLabels={statusLabels}
 								sort={sort}
 								onSort={(by) => setSort((current) => nextSort(current, by))}
-								whereColumn={clientId ? "project" : unfiled ? "where" : null}
+								whereColumn={clientId ? "project" : null}
 								renamingKey={renaming}
 								onRename={(item, title) => {
 									setRenaming(null);
@@ -543,15 +543,17 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 								}}
 								canDropOn={() => false}
 								onDropOn={() => undefined}
-								label={`Documents of ${name}`}
+								label={files ? "Files" : `Documents of ${name}`}
 								fill={false}
 								empty={
 									<div className="px-6 py-10 text-center">
-										<p className="font-[var(--weight-medium)]">{unfiled ? "Every file has a client or a project" : "No documents yet"}</p>
+										<p className="font-[var(--weight-medium)]">{files ? "No files yet" : "No documents yet"}</p>
 										<p className="mx-auto mt-1 max-w-[46ch] text-dense text-[var(--ink-muted)]">
-											{unfiled
-												? "A file kept under neither would be listed here, to give it one."
-												: "Drop any files here, or press Add files. A file that looks like a document already here is shown beside it first."}
+											{search.trim()
+												? "Nothing here has those words."
+												: files
+													? "Your own files, kept under no client and no project. Drop any here, or press Add files."
+													: "Drop any files here, or press Add files. A file that looks like a document already here is shown beside it first."}
 										</p>
 									</div>
 								}
@@ -595,14 +597,14 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 					/>
 				) : null}
 
-				{addingExisting && here ? (
+				{addingExisting && !files ? (
 					<AddExistingDialog
 						scope={clientId ? { clientId } : { projectId: projectId! }}
 						name={name}
 						onClose={() => setAddingExisting(false)}
 						onAdded={(record, from) => {
 							setAddingExisting(false);
-							setNotice(from === "Not linked" ? `${record.title} added.` : `${record.title} moved here from ${from}.`);
+							setNotice(`${record.title} moved here from ${from}.`);
 							changed();
 						}}
 					/>
@@ -628,7 +630,7 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 						</div>
 					</Dialog>
 				) : null}
-				{items && here ? <AddFilesFlow items={items} place={here} placeName={name} onDone={finished} /> : null}
+				{items ? <AddFilesFlow items={items} place={here} placeName={name} onDone={finished} /> : null}
 				{picker ? (
 					<RecordPickerDialog
 						title={`${picker.mode === "copy" ? "Copy" : "Move"} ${picker.records.length === 1 ? picker.records[0]!.title : plural(picker.records.length, "document", "documents")}`}

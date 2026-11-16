@@ -7,7 +7,7 @@ export type ScreenId =
 	| "mail"
 	| "mail-templates"
 	| "notes"
-	| "unfiled"
+	| "files"
 	| "clients"
 	| "projects"
 	| "reminders"
@@ -31,6 +31,7 @@ export const SIDEBAR_TOP: ScreenItem[] = [
 	{ id: "projects", label: "Projects", icon: "projects" },
 	{ id: "mail", label: "Mail", icon: "mail" },
 	{ id: "notes", label: "Notes", icon: "note" },
+	{ id: "files", label: "Files", icon: "documents" },
 ];
 
 export const SCREEN_LABELS: Record<ScreenId, string> = {
@@ -39,7 +40,7 @@ export const SCREEN_LABELS: Record<ScreenId, string> = {
 	mail: "Mail",
 	"mail-templates": "Styled mail",
 	notes: "Notes",
-	unfiled: "Files without a client",
+	files: "Files",
 	clients: "Clients",
 	projects: "Projects",
 	reminders: "Reminders",
@@ -53,7 +54,7 @@ export const SIDEBAR_ENTRY: Record<ScreenId, ScreenId> = {
 	mail: "mail",
 	"mail-templates": "mail",
 	notes: "notes",
-	unfiled: "overview",
+	files: "files",
 	clients: "clients",
 	projects: "projects",
 	reminders: "overview",
@@ -74,6 +75,7 @@ export const NEW_ON: Partial<Record<ScreenId, { screen: ScreenId; label: string 
 	mail: { screen: "mail", label: "New message" },
 	"mail-templates": { screen: "mail", label: "New message" },
 	notes: { screen: "notes", label: "New note" },
+	files: { screen: "files", label: "New page" },
 };
 
 /**
@@ -127,6 +129,7 @@ export const NEW_MENUS: Partial<Record<ScreenId, NewMenuEntry[]>> = {
 export const NEW_OWN_ICON: Record<string, IconName> = {
 	"New reminder": "reminders",
 	"New message": "mail",
+	"New page": "documents",
 };
 
 /**
@@ -136,4 +139,4 @@ export const NEW_OWN_ICON: Record<string, IconName> = {
  * whole New menu. With a document open the plus at the left takes its place, as
  * the page frame draws it.
  */
-export const NEW_AT_RIGHT: ScreenId[] = ["notes", "clients", "projects", "reminders"];
+export const NEW_AT_RIGHT: ScreenId[] = ["notes", "files", "clients", "projects", "reminders"];

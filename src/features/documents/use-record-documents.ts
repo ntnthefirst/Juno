@@ -4,8 +4,8 @@ import { messageOf } from "../../lib/errors";
 import { useRecordsChanged } from "../../lib/new-record";
 import { onDocumentsChanged } from "../../lib/pdf-drop";
 
-/** Whose documents: a client's (with its projects'), a project's, or those kept under neither. */
-export type DocumentsScope = { clientId: string } | { projectId: string } | { unfiled: true };
+/** Whose documents: a client's (with its projects'), a project's, or the Files place, those kept under neither. */
+export type DocumentsScope = { clientId: string } | { projectId: string } | { files: true };
 
 export type RecordDocumentsLoad =
 	| { status: "loading" }
@@ -20,7 +20,7 @@ export type RecordDocuments = {
 };
 
 function read(scope: DocumentsScope): Promise<DocumentRecord[]> {
-	if ("unfiled" in scope) return window.juno.documents.listUnfiled();
+	if ("files" in scope) return window.juno.documents.listUnfiled();
 	if ("clientId" in scope) return window.juno.documents.list({ clientId: scope.clientId });
 	return window.juno.documents.list({ projectId: scope.projectId });
 }
@@ -35,14 +35,14 @@ export function useRecordDocuments(scope: DocumentsScope): RecordDocuments {
 	const [load, setLoad] = useState<RecordDocumentsLoad>({ status: "loading" });
 	const [changedOutside, setChangedOutside] = useState<{ ids: string[]; at: number }>({ ids: [], at: 0 });
 	const [stamp, setStamp] = useState(0);
-	const key = "unfiled" in scope ? "unfiled" : "clientId" in scope ? `client:${scope.clientId}` : `project:${scope.projectId}`;
+	const key = "files" in scope ? "files" : "clientId" in scope ? `client:${scope.clientId}` : `project:${scope.projectId}`;
 
 	const reload = useCallback(() => setStamp((value) => value + 1), []);
 
 	useEffect(() => {
 		let cancelled = false;
 		const wanted: DocumentsScope =
-			key === "unfiled" ? { unfiled: true } : key.startsWith("client:") ? { clientId: key.slice(7) } : { projectId: key.slice(8) };
+			key === "files" ? { files: true } : key.startsWith("client:") ? { clientId: key.slice(7) } : { projectId: key.slice(8) };
 		Promise.all([read(wanted), window.juno.reference.getSet("document_status")])
 			.then(([records, set]) => {
 				if (!cancelled) setLoad({ status: "ready", records, statuses: set ? set.items : [] });

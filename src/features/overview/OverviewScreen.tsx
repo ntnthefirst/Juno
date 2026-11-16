@@ -261,7 +261,6 @@ export function OverviewScreen() {
 						statuses={statuses.status === "ready" && statuses.value ? statuses.value.items : []}
 						clients={clients}
 						hasAccounts={accounts.status === "ready" ? accounts.value.length > 0 : null}
-						onDocumentsChanged={documents.reload}
 					/>
 				</aside>
 			</div>

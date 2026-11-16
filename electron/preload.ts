@@ -481,7 +481,7 @@ const api: JunoApi = {
 		},
 		copyTo: (id, target) => call("documents.copyTo", id, target),
 		convertPdf: (id) => call("documents.convertPdf", id),
-		preview: (source) => call("documents.preview", source),
+		preview: (source, options) => call("documents.preview", source, options),
 		open: (id) => call("documents.open", id),
 		startDrag: (ids) => call("documents.startDrag", ids),
 		onChanged: (listener) => {

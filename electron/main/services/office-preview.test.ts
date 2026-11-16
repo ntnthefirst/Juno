@@ -94,6 +94,17 @@ describe("previews through Word and PowerPoint", () => {
 		expect(readFileSync(path, "utf8")).toBe("a deck");
 	});
 
+	it("never starts the program for a tile, which takes only a PDF already made", async () => {
+		configurePreviewCache({ directory: mkdtempSync(join(tmpdir(), "juno-office-cache-")) });
+		const calls = office();
+		const file = await docxBytes(["Een brief"]);
+		expect((await preview(bytes("brief.docx", file), freshDb(), { convert: false })).kind).toBe("html");
+		expect(calls).toHaveLength(0);
+		await preview(bytes("brief.docx", file), freshDb());
+		expect(await preview(bytes("brief.docx", file), freshDb(), { convert: false })).toMatchObject({ kind: "pdf", via: "word" });
+		expect(calls).toHaveLength(1);
+	});
+
 	it("runs one conversion for two looks at the same file at once", async () => {
 		configurePreviewCache({ directory: mkdtempSync(join(tmpdir(), "juno-office-cache-")) });
 		const calls = office();

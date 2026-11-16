@@ -24,7 +24,13 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import JSZip from "jszip";
 import { extensionOf } from "../../shared/mime";
-import type { FilePreview, FilePreviewForAgent, FilePreviewMeta, FilePreviewSource } from "../../shared/types";
+import type {
+	FilePreview,
+	FilePreviewForAgent,
+	FilePreviewMeta,
+	FilePreviewOptions,
+	FilePreviewSource,
+} from "../../shared/types";
 import { getDb, type Db } from "../db";
 import * as versions from "./document-versions";
 import {
@@ -367,7 +373,7 @@ async function fallback(file: SourceFile, meta: FilePreviewMeta, reason: string)
 	return { kind: "none", meta, reason };
 }
 
-async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePreview> {
+async function previewOf(file: SourceFile, family: FileFamily, options: FilePreviewOptions = {}): Promise<FilePreview> {
 	const meta = metaOf(file);
 	if (file.size > MAX_PREVIEW_BYTES) {
 		return fallback(file, meta, "This file is too large to preview. Open it to see it.");
@@ -396,7 +402,10 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 		case "legacy-word":
 		case "presentation": {
 			// Word or PowerPoint lays it out as it prints, when installed (decision 83).
-			const office = await officePdf({ name: file.name, path: file.path, bytes: file.bytes, versionId: file.versionId });
+			const office = await officePdf(
+				{ name: file.name, path: file.path, bytes: file.bytes, versionId: file.versionId },
+				{ convert: options.convert !== false },
+			);
 			if (office) return { kind: "pdf", meta, data: new Uint8Array(office.pdf), via: office.via };
 			if (family === "presentation") return fallback(file, meta, "Juno shows a deck's slides through PowerPoint. Open it to see them.");
 			if (family === "legacy-word") return fallback(file, meta, "Juno has no preview for this kind of file. Open it to see it.");
@@ -465,10 +474,14 @@ export function tidyPreviewCache(db: Db = getDb()): number {
 	return previewCache.forgetDeletedVersions((ids) => versions.aliveIds(ids, db)) + previewCache.prune();
 }
 
-/** What the window draws for a file. */
-export async function preview(source: FilePreviewSource, db: Db = getDb()): Promise<FilePreview> {
+/** What the window draws for a file. A tile asks with `convert: false`, which never starts Word or PowerPoint. */
+export async function preview(
+	source: FilePreviewSource,
+	db: Db = getDb(),
+	options: FilePreviewOptions = {},
+): Promise<FilePreview> {
 	const file = await resolve(source, db);
-	return previewOf(file, familyOf(file.name));
+	return previewOf(file, familyOf(file.name), options);
 }
 
 /**

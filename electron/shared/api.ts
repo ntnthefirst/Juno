@@ -96,6 +96,7 @@ import type {
 	DocumentMoveInput,
 	ConvertPdfResult,
 	FilePreview,
+	FilePreviewOptions,
 	FilePreviewSource,
 	DocumentsChanged,
 	IsoDate,
@@ -863,7 +864,7 @@ export interface JunoApi {
 		/** Keeps a PDF of the newest version as the next version. `via: "juno"` means the layout may differ. */
 		convertPdf(id: string): Promise<ConvertPdfResult>;
 		/** What to draw for a file. Never a path; pictures and Word files come as `app://preview/` addresses. */
-		preview(source: FilePreviewSource): Promise<FilePreview>;
+		preview(source: FilePreviewSource, options?: FilePreviewOptions): Promise<FilePreview>;
 		/**
 		 * Opens the newest version in the operating system's app for it: a working
 		 * copy whose saved edits come back as versions, or read only when it is signed.

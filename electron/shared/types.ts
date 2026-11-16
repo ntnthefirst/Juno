@@ -2140,6 +2140,15 @@ export type FilePreviewSource =
 	| { kind: "asset"; assetId: string }
 	| { kind: "bytes"; fileName: string; data: Uint8Array; fileDate?: Iso };
 
+/** How a preview is made. */
+export interface FilePreviewOptions {
+	/**
+	 * False for a tile's picture: Word or PowerPoint is never started for one,
+	 * and their PDF is used only when a preview already made it (decision 83).
+	 */
+	convert?: boolean;
+}
+
 /** What every preview says about the file, whatever it can show of it. */
 export interface FilePreviewMeta {
 	name: string;

@@ -114,9 +114,10 @@ async function convert(source: OfficeSource, route: OfficeRoute, configured: Hoo
 
 /**
  * The PDF the file's own program makes of it, from the cache when it was made
- * before, or null when no program here draws it or the program failed.
+ * before, or null when no program here draws it or the program failed. With
+ * `convert: false` (a tile's picture) only the cache is read.
  */
-export async function officePdf(source: OfficeSource): Promise<OfficePdf | null> {
+export async function officePdf(source: OfficeSource, options: { convert?: boolean } = {}): Promise<OfficePdf | null> {
 	const configured = hooks;
 	const route = officeRouteFor(source.name);
 	if (!configured || !route) return null;
@@ -129,7 +130,7 @@ export async function officePdf(source: OfficeSource): Promise<OfficePdf | null>
 	if (!key) return null;
 	const kept = cache.read(subject);
 	if (kept && isPdfBytes(kept)) return { pdf: kept, via: route, cached: true };
-	if (failed.has(key)) return null;
+	if (options.convert === false || failed.has(key)) return null;
 
 	const running = inFlight.get(key);
 	if (running) return running;

@@ -273,9 +273,33 @@ export function ExplorerView({
 		};
 	}
 
+	/**
+	 * The keys of the list's empty space, which takes the focus when it is
+	 * clicked: Ctrl V pastes there, and Ctrl A selects every row, so a place
+	 * with nothing selected, or nothing in it, still takes a paste.
+	 */
+	function onBlankKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+		if (event.target !== event.currentTarget || renamingKey !== null) return;
+		const command = listCommandFor(event.nativeEvent);
+		if (command?.kind === "paste") {
+			event.preventDefault();
+			onCommand(command);
+		} else if (command?.kind === "select-all" && keys.length > 0) {
+			event.preventDefault();
+			onSelection(selectEverything(selection, keys));
+		}
+	}
+
 	if (items.length === 0) {
 		return (
-			<div className="h-full" onContextMenu={onBlankMenu}>
+			<div
+				tabIndex={0}
+				role="group"
+				aria-label={label}
+				className="h-full rounded-[var(--radius-lg)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus)]"
+				onContextMenu={onBlankMenu}
+				onKeyDown={onBlankKeyDown}
+			>
 				{empty}
 			</div>
 		);
@@ -296,17 +320,21 @@ export function ExplorerView({
 
 	return (
 		<div
+			tabIndex={-1}
+			onKeyDown={onBlankKeyDown}
 			onMouseDown={(event) => {
-				// A press on the empty space between rows lets the selection go.
+				// A press on the empty space between rows lets the selection go, and
+				// keeps the keys with the list, so a paste lands here.
 				if (event.button === 0 && !(event.target as Element).closest("[data-explorer-item], button")) {
 					onSelection({ ...selection, selected: [] });
+					event.currentTarget.focus({ preventScroll: true });
 				}
 			}}
 			onContextMenu={(event) => {
 				if ((event.target as Element).closest("[data-explorer-item]")) return;
 				onBlankMenu?.(event);
 			}}
-			className={fill ? "min-h-full pb-10" : "pb-1"}
+			className={`outline-none ${fill ? "min-h-full pb-10" : "pb-1"}`}
 		>
 			{view === "list" ? (
 				<>

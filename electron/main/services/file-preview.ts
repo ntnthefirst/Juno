@@ -443,6 +443,21 @@ async function previewOf(file: SourceFile, family: FileFamily): Promise<FilePrev
 }
 
 /**
+ * The bytes of a picture a preview shows, for copying it as a picture
+ * (decision 83). A PNG, a JPEG, or another picture the platform can read; an
+ * SVG is a document of its own and is refused, as is anything that is not a
+ * picture.
+ */
+export async function pictureOf(source: FilePreviewSource, db: Db = getDb()): Promise<{ name: string; bytes: Buffer }> {
+	const file = await resolve(source, db);
+	if (familyOf(file.name) !== "image") {
+		throw new Error(`"${file.name}" is not a picture Juno can copy. Open it and copy it from its own app.`);
+	}
+	if (file.size > MAX_PREVIEW_BYTES) throw new Error(`"${file.name}" is too large to copy as a picture.`);
+	return { name: file.name, bytes: bytesOf(file) };
+}
+
+/**
  * Drops the cached PDF of every version deleted since the cache was last
  * looked at, and prunes it to its ceiling. Run once after the database opens.
  */

@@ -61,7 +61,7 @@ export function FileQuickLook({ files, index, onIndex, onClose, closeLabel, onOp
 			columnOpen={columnOpen}
 			onToggleColumn={() => setColumnOpen((open) => !open)}
 		>
-			<FilePreviewView state={state} {...(onOpen ? { onOpen: () => onOpen(file) } : {})} />
+			<FilePreviewView state={state} source={file.source} {...(onOpen ? { onOpen: () => onOpen(file) } : {})} />
 		</FullPreview>
 	);
 }

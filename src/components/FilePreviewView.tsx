@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import type { FilePreviewSource } from "@shared/types";
 import type { PreviewState } from "../lib/use-file-preview";
 import { FileTypeIcon } from "./FileTypeIcon";
 import { Button } from "./Button";
+import { ImagePreview } from "./ImagePreview";
 import { PdfBytesViewer } from "./PdfBytesViewer";
 import { PreviewSkeleton } from "./PreviewSkeleton";
 import { SheetPreview } from "./SheetPreview";
@@ -12,6 +14,8 @@ type FilePreviewViewProps = {
 	onOpen?: () => void;
 	/** Drawn in the PDF viewer's toolbar. */
 	caption?: ReactNode;
+	/** What the preview was made from, so a picture can be copied from the same file, by id. */
+	source?: FilePreviewSource;
 };
 
 /**
@@ -24,7 +28,7 @@ type FilePreviewViewProps = {
  * While the file is read the space holds the shape of a page, so nothing moves
  * when it lands.
  */
-export function FilePreviewView({ state, onOpen, caption }: FilePreviewViewProps) {
+export function FilePreviewView({ state, onOpen, caption, source }: FilePreviewViewProps) {
 	if (state.status === "loading") return <PreviewSkeleton />;
 	if (state.status === "error") {
 		return (
@@ -50,17 +54,17 @@ export function FilePreviewView({ state, onOpen, caption }: FilePreviewViewProps
 	switch (preview.kind) {
 		case "pdf":
 			return <PdfBytesViewer name={preview.meta.name} data={preview.data} caption={caption} />;
-		case "image":
+		case "image": {
+			// An SVG is a document, not a picture the clipboard takes.
+			const copyable = source && preview.meta.extension !== "svg" ? source : null;
 			return (
-				<div className="animate-fade flex h-full items-center justify-center overflow-auto bg-[var(--sunken)] p-6">
-					<img
-						src={preview.url}
-						alt={preview.meta.name}
-						draggable={false}
-						className="max-h-full max-w-full rounded-[var(--radius-sm)] object-contain shadow-[var(--shadow-popover)]"
-					/>
-				</div>
+				<ImagePreview
+					url={preview.url}
+					name={preview.meta.name}
+					{...(copyable ? { onCopy: () => window.juno.documents.clipboard.copyPicture(copyable) } : {})}
+				/>
 			);
+		}
 		case "html":
 			return (
 				<div className="animate-fade h-full bg-[var(--sunken)] p-6">

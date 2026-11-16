@@ -95,7 +95,8 @@ type DocumentDetailProps = {
  */
 function VersionBody({ version, caption, onOpen }: VersionBodyProps) {
 	const pdf = isPdfFile(version.fileName, version.mediaType);
-	const state = useFilePreview(pdf ? null : { kind: "version", versionId: version.id });
+	const source = { kind: "version" as const, versionId: version.id };
+	const state = useFilePreview(pdf ? null : source);
 	if (pdf) {
 		return (
 			<PdfViewer
@@ -106,7 +107,7 @@ function VersionBody({ version, caption, onOpen }: VersionBodyProps) {
 			/>
 		);
 	}
-	return <FilePreviewView state={state} onOpen={onOpen} caption={caption} />;
+	return <FilePreviewView state={state} onOpen={onOpen} caption={caption} source={source} />;
 }
 
 /**

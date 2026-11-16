@@ -477,6 +477,7 @@ const api: JunoApi = {
 		clipboard: {
 			copy: (ids, mode) => call("documents.clipboard.copy", ids, mode),
 			paste: (place) => call("documents.clipboard.paste", place),
+			copyPicture: (source) => call("documents.clipboard.copyPicture", source),
 		},
 		copyTo: (id, target) => call("documents.copyTo", id, target),
 		convertPdf: (id) => call("documents.convertPdf", id),

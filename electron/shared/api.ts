@@ -851,6 +851,12 @@ export interface JunoApi {
 		clipboard: {
 			copy(ids: string[], mode: "copy" | "cut"): Promise<ClipboardCopyResult>;
 			paste(place: DocumentPlace): Promise<PasteResult>;
+			/**
+			 * Puts the picture a preview shows on the system clipboard as a
+			 * picture, read in the main process from the same source the preview
+			 * was made from, never a path (decision 83). Interface only.
+			 */
+			copyPicture(source: FilePreviewSource): Promise<void>;
 		};
 		/** A new document from the newest version, under another client or project. */
 		copyTo(id: string, target: DocumentMoveInput): Promise<DocumentRecord>;

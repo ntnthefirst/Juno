@@ -193,6 +193,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{ combos: ["mod+=", "mod+-"], label: "Zoom in and out, or turn the wheel with Ctrl held" },
 			{ combos: ["mod+0"], label: "Fit the file to the window again" },
 			{ combos: [COMBOS.find], label: "Find in a PDF or a text file" },
+			{ combos: ["mod+c"], label: "Copy what is selected, or the picture" },
 			{ combos: ["escape"], label: "Clear the selection, then close the preview" },
 		],
 	},

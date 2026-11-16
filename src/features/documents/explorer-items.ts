@@ -1,24 +1,16 @@
-import type { DocumentRecord, DocumentTemplateEntry } from "@shared/types";
+import type { DocumentRecord } from "@shared/types";
 import { fileTypeLabel } from "../../lib/file-type";
 
 /**
- * One thing a list of files draws: a document, or a template on the Templates
- * screen. `key` is what the selection holds, so the ids of the two kinds never
- * collide.
+ * One thing a list of files draws: a document. `key` is what the selection
+ * holds.
  */
-export type ExplorerItem =
-	| { kind: "document"; key: string; record: DocumentRecord }
-	| { kind: "template"; key: string; template: DocumentTemplateEntry };
+export type ExplorerItem = { kind: "document"; key: string; record: DocumentRecord };
 
 export const documentKey = (id: string) => `doc:${id}`;
-export const templateKey = (id: string) => `tpl:${id}`;
 
 export function documentItem(record: DocumentRecord): ExplorerItem {
 	return { kind: "document", key: documentKey(record.id), record };
-}
-
-export function templateItem(template: DocumentTemplateEntry): ExplorerItem {
-	return { kind: "template", key: templateKey(template.id), template };
 }
 
 /** The extra column of a list: where each document is kept, or which of the client's projects it is under. */
@@ -26,7 +18,7 @@ export type WhereColumn = "where" | "project";
 
 /** The project a client's document is kept under, or nothing for one of the client's own. */
 export function projectOf(item: ExplorerItem): string {
-	return item.kind === "document" ? (item.record.projectName ?? "") : "";
+	return item.record.projectName ?? "";
 }
 
 export type SortColumn = "name" | "type" | "size" | "modified";
@@ -36,27 +28,23 @@ export const DEFAULT_SORT: ExplorerSort = { by: "name", descending: false };
 
 /** The Type column. A page and a document with no file yet say so rather than naming a format. */
 export function typeOf(item: ExplorerItem): string {
-	if (item.kind === "template") return item.template.hasCanvas ? "Template on paper" : "Template";
 	const { record } = item;
 	if (record.sourceKind === "page") return "Page";
 	if (!record.latestVersion) return "No file yet";
 	return fileTypeLabel(record.latestVersion.fileName, record.latestVersion.mediaType);
 }
 
-/** In bytes. Null for a page, a template and a version kept before sizes were recorded. */
+/** In bytes. Null for a page and a version kept before sizes were recorded. */
 export function sizeOf(item: ExplorerItem): number | null {
-	return item.kind === "document" ? (item.record.latestVersion?.byteSize ?? null) : null;
+	return item.record.latestVersion?.byteSize ?? null;
 }
 
 /** When it last changed: the newest file's own date, or the record's when it has no file. */
 export function modifiedOf(item: ExplorerItem): string | null {
-	if (item.kind === "document") return item.record.latestVersion?.fileDate ?? item.record.updatedAt;
-	if (item.kind === "template") return item.template.updatedAt;
-	return null;
+	return item.record.latestVersion?.fileDate ?? item.record.updatedAt;
 }
 
 export function nameOf(item: ExplorerItem): string {
-	if (item.kind === "template") return item.template.name;
 	return item.record.title;
 }
 

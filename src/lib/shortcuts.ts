@@ -106,9 +106,8 @@ export const COMBOS = {
 
 /**
  * The keys of a file list while it has focus: a client's or a project's
- * Documents tab, and the Templates screen. They are the list's own, listened for on
- * the list and not on the window, so a field anywhere else keeps its Ctrl C and
- * Ctrl V.
+ * Documents tab. They are the list's own, listened for on the list and not on
+ * the window, so a field anywhere else keeps its Ctrl C and Ctrl V.
  */
 export const LIST_COMBOS = {
 	preview: "space",

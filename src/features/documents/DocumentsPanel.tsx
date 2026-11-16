@@ -14,7 +14,6 @@ import { messageOf } from "../../lib/errors";
 import type { ListCommand } from "../../lib/list-keys";
 import { NO_SELECTION, pruneSelection, selectOnly, type ListSelection } from "../../lib/list-selection";
 import { contextMenuFor } from "../../lib/native-menu";
-import { requestOpen } from "../../lib/open-entity";
 import {
 	announceDocumentsChanged,
 	BUSY_ADDING,
@@ -243,11 +242,6 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 		}
 	}
 
-	/** The Templates screen, from here: a document made there is kept with this record. */
-	const openTemplates = () => {
-		if (here) requestOpen({ kind: "templates", place: { ...here, name } });
-	};
-
 	/* ---------------------------------------------------------- actions */
 
 	async function act(work: () => Promise<unknown>, done?: string) {
@@ -420,7 +414,6 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 		? blankMenuFor("documents", {
 				"add-files": () => void choose(),
 				"new-page": () => void newPage(),
-				"new-document": openTemplates,
 			})
 		: undefined;
 
@@ -456,7 +449,6 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 						{here ? (
 							<>
 								<span aria-hidden className="mx-1 h-5 w-px bg-[var(--line)]" />
-								<ToolbarButton icon="templates" label="Templates" onClick={openTemplates} />
 								<MenuButton
 									size="dense"
 									ariaLabel="New document"
@@ -468,12 +460,6 @@ export function DocumentsPanel({ scope, name, openDocumentId = null, onOpenedDoc
 											label: "Page",
 											icon: "note",
 											onSelect: () => void newPage(),
-										},
-										{
-											id: "template",
-											label: "Document from template",
-											icon: "templates",
-											onSelect: openTemplates,
 										},
 										{
 											id: "existing",

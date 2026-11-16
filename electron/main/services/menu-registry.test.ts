@@ -190,7 +190,7 @@ describe("documents explorer menus", () => {
 
 	it("starts a Documents tab's blank menu with adding to that record, and offers no folder", async () => {
 		const entries = ids(await ask("blank", "documents"));
-		expect(entries.slice(0, 3)).toEqual(["add-files", "new-page", "new-document"]);
+		expect(entries.slice(0, 2)).toEqual(["add-files", "new-page"]);
 		expect(entries).not.toContain("new-folder");
 	});
 });

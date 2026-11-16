@@ -7,8 +7,7 @@ const EVENT = "juno:open-entity";
 export type OpenTarget =
 	/**
 	 * A project. `tab: "documents"` opens it on its Documents tab, and
-	 * `documentId` previews that document there, as a document made from a
-	 * template lands where it is kept.
+	 * `documentId` previews that document there.
 	 */
 	| { kind: "project"; id: string; name: string; tab?: "documents"; documentId?: string }
 	/**
@@ -17,14 +16,6 @@ export type OpenTarget =
 	 * project's Documents tab too.
 	 */
 	| { kind: "document"; id: string; name: string }
-	/** A document template, previewed on the Templates screen. */
-	| { kind: "document-template"; id: string; name: string }
-	/**
-	 * The Templates screen. `place` is the client or project it was opened
-	 * from: a document made from a template there is kept under it, and the
-	 * way back goes to it.
-	 */
-	| { kind: "templates"; place?: TemplatesPlace | null }
 	| { kind: "note"; id: string }
 	| { kind: "thread"; id: string; messageId: string | null }
 	| { kind: "mail-template"; id: string; mode: "view" | "edit" }
@@ -39,9 +30,6 @@ export type OpenTarget =
 	| { kind: "compose"; to: MailAddress[]; clientId?: string | null; projectId?: string | null }
 	| { kind: "screen"; screen: ScreenId };
 
-/** Where a document made on the Templates screen is kept, and what the way back is called. */
-export type TemplatesPlace = { clientId: string | null; projectId: string | null; name: string };
-
 /** The screen that shows what a request asks for. */
 export function screenFor(target: OpenTarget): ScreenId {
 	switch (target.kind) {
@@ -50,9 +38,6 @@ export function screenFor(target: OpenTarget): ScreenId {
 		case "document":
 			// Never landed on: the shell draws a document over the screen in view.
 			return "overview";
-		case "document-template":
-		case "templates":
-			return "templates";
 		case "note":
 			return "notes";
 		case "thread":

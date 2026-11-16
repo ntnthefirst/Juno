@@ -21,9 +21,9 @@ type WalkthroughStop = {
 	target: string;
 };
 
-// Ordered to match the sidebar, top to bottom. Styled mail and Templates have
-// no entry of their own: they sit behind the switch at the top of Mail and
-// Documents, so those stops point at the switch instead.
+// Ordered to match the sidebar, top to bottom. Styled mail has no entry of
+// its own: it sits behind the switch at the top of Mail, so that stop points
+// at the switch instead.
 const STOPS: WalkthroughStop[] = [
 	{
 		id: "overview",
@@ -77,7 +77,7 @@ const STOPS: WalkthroughStop[] = [
 	{
 		id: "documents",
 		title: "Documents",
-		body: "Every client and project has a Documents tab: any kind of file, previewed in place, signed, and made from your templates. Templates is a button on that tab.",
+		body: "Every client and project has a Documents tab: any kind of file, previewed in place and signed.",
 		screen: "projects",
 		target: '[data-nav="projects"]',
 	},

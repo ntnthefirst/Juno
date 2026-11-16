@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import type { DocumentRecord, DocumentTemplate, DocumentVersion, ReferenceItem, VersionUse } from "@shared/types";
+import type { DocumentRecord, DocumentVersion, ReferenceItem, VersionUse } from "@shared/types";
 import { BelongsToLinks } from "../../components/BelongsToLinks";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
@@ -8,10 +8,8 @@ import { FullPreview } from "../../components/FullPreview";
 import { IconAction } from "../../components/IconAction";
 import { MenuButton, type MenuItem } from "../../components/Menu";
 import { PdfViewer } from "../../components/PdfViewer";
-import { RecordLink } from "../../components/RecordLink";
 import { Select } from "../../components/Select";
 import { messageOf } from "../../lib/errors";
-import { requestOpen } from "../../lib/open-entity";
 import { fileTypeLabel, isPdfFile } from "../../lib/file-type";
 import { modifiedLabel } from "../../lib/modified-label";
 import { announceDocumentsChanged, onDocumentsChanged } from "../../lib/pdf-drop";
@@ -36,7 +34,6 @@ function formatDate(date: string | null): string {
 type Detail = {
 	record: DocumentRecord;
 	statuses: ReferenceItem[];
-	template: DocumentTemplate | null;
 };
 
 type Load =
@@ -165,11 +162,9 @@ export function DocumentDetail({
 			window.juno.reference.getSet("document_status"),
 		]);
 		if (!record) return null;
-		const template = record.templateId ? await window.juno.templates.get(record.templateId) : null;
 		return {
 			record,
 			statuses: statusSet ? statusSet.items.filter((item) => item.hiddenAt === null) : [],
-			template,
 		};
 	}, [documentId]);
 
@@ -255,8 +250,7 @@ export function DocumentDetail({
 		);
 	}
 
-	const { record, statuses, template } = load.detail;
-	const templateVersion = record.templateVersion ?? template?.version ?? null;
+	const { record, statuses } = load.detail;
 	const isImported = record.sourceKind === "imported";
 	const hasFile = viewing !== null;
 	const newestIsPdf = latest ? isPdfFile(latest.fileName, latest.mediaType) : false;
@@ -451,27 +445,9 @@ export function DocumentDetail({
 							</Fact>
 						</div>
 					) : null}
-					{isImported ? (
-						<Fact label="Source">Added from a file</Fact>
-					) : (
-						<>
-							<Fact label="Template">
-								{template ? (
-									<RecordLink
-										label={`Open ${template.name}`}
-										onOpen={() => requestOpen({ kind: "document-template", id: template.id, name: template.name })}
-									>
-										{template.name}
-									</RecordLink>
-								) : (
-									"The template has since been removed."
-								)}
-							</Fact>
-							<Fact label="Template version">
-								<span className="tabular">{templateVersion === null ? "Unknown" : templateVersion}</span>
-							</Fact>
-						</>
-					)}
+					<Fact label="Source">
+						{isImported ? "Added from a file" : record.sourceKind === "page" ? "Written in Juno" : "Made from a template"}
+					</Fact>
 				</div>
 			</Section>
 

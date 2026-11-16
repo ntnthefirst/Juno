@@ -23,8 +23,6 @@ export const MENU_KINDS = [
 	"note",
 	"outbox",
 	"template",
-	/** A document template on the Templates screen. */
-	"document-template",
 	/** An attachment of a received mail, in the reader. */
 	"attachment",
 ] as const;
@@ -89,7 +87,6 @@ export const MENU_ACTIONS = [
 	"new-reminder",
 	"new-client",
 	"new-project",
-	"new-document",
 	"new-page",
 	"move-to-project",
 	"new-message",

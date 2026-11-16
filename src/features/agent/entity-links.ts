@@ -31,7 +31,8 @@ const KIND_SCREENS: Partial<Record<AgentEntityKind, Extract<OpenTarget, { kind: 
 /** Whether a record can be opened from here at all. A deleted one cannot. */
 export function isOpenable(entity: AgentEntityRef): boolean {
 	if (entity.gone) return false;
-	return entity.kind !== "automation";
+	// Document templates were removed (decision 82): an older log entry names one with nowhere to open.
+	return entity.kind !== "automation" && entity.kind !== "documentTemplate";
 }
 
 /**
@@ -58,9 +59,6 @@ export async function openEntity(entity: AgentEntityRef): Promise<void> {
 			return;
 		case "document":
 			requestOpen({ kind: "document", id: entity.id, name: entity.label ?? "Document" });
-			return;
-		case "documentTemplate":
-			requestOpen({ kind: "document-template", id: entity.id, name: entity.label ?? "Template" });
 			return;
 		case "mailThread":
 			requestOpen({ kind: "thread", id: entity.id, messageId: null });

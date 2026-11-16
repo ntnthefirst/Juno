@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent, type HTMLAttributes } from "react";
 import type { MailBlock, MailColumns, MailColumnsCell, MailContainer, MailFont, MailLayout, MailNode, TemplateInput } from "@shared/types";
-import { drawPlacement, type ComponentLookup } from "@shared/components";
-import { assetKeyOf } from "@shared/paper";
 import { Icon } from "../../../../components/Icon";
 import { asListItems, canMoveInto, firstChildOf } from "./canvas-actions";
 import {
@@ -63,31 +61,7 @@ type CanvasViewProps = {
 	onContentHeight: (height: number) => void;
 	/** The size of what is selected, for the W and H fields. */
 	onMeasure: (size: Measured | null) => void;
-	/** A document: the pages are the sheets, so nothing is drawn behind them. */
-	sheets?: boolean;
-	/** A document's pictures, by the key an image block names them with (`{{asset.<key>}}`). */
-	pictures?: Record<string, string>;
-	/** The components a document may have placed, to draw what a placement stands for. */
-	components?: ComponentLookup;
 };
-
-/**
- * A placement drawn, kept until its component or its values change. Drawing
- * gives every node a new id, and a tree whose ids change on every render is a
- * tree React rebuilds on every render.
- */
-const drawn = new Map<string, { source: object | null; signature: string; node: MailContainer | null }>();
-
-function placementView(container: MailContainer, lookup: ComponentLookup | undefined): MailContainer | null {
-	if (!container.component || !lookup) return null;
-	const source = lookup(container.component.componentId);
-	const signature = JSON.stringify([container.component, container.name, container.box.margin, container.grow, container.alignSelf]);
-	const known = drawn.get(container.id);
-	if (known && known.source === source && known.signature === signature) return known.node;
-	const node = drawPlacement(container, lookup);
-	drawn.set(container.id, { source, signature, node });
-	return node;
-}
 
 /**
  * What the canvas adds to the element a node is drawn as: its handlers, its
@@ -105,10 +79,7 @@ type BlockViewProps = {
 	inputs: TemplateInput[];
 	fonts: MailFont[];
 	host: Host;
-	pictures: Record<string, string>;
 };
-
-const NO_PICTURES: Record<string, string> = {};
 
 /**
  * One block, drawn as the element the compiler writes for it.
@@ -119,7 +90,7 @@ const NO_PICTURES: Record<string, string> = {};
  * selection would outline the room the block was given rather than the block:
  * a text block fixed at 100 pixels would be drawn as a line across the frame.
  */
-function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
+function BlockView({ block, inputs, fonts, host }: BlockViewProps) {
 	const own = { ...host.attrs, "data-canvas-id": host.id };
 	switch (block.kind) {
 		case "heading": {
@@ -203,9 +174,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 		case "image": {
 			// Only a picture Juno holds is drawn. A web address is the reader's
 			// mail client's to load, so it gets a box that says so (remote-image.ts).
-			// A document's own picture is named by its key and drawn from Juno.
-			const key = assetKeyOf(block.src);
-			const src = key ? (pictures[key] ?? "") : block.src;
+			const src = block.src;
 			const picture = src ? (
 				isDrawable(src) ? (
 					<img
@@ -242,7 +211,7 @@ function BlockView({ block, inputs, fonts, host, pictures }: BlockViewProps) {
 					style={host.place}
 					className={`flex items-center gap-1.5 text-micro text-[var(--canvas-ink-muted)] ${host.className}`}
 				>
-					<Icon name="image" size={14} /> {key ? "This picture is no longer stored" : "No image address yet"}
+					<Icon name="image" size={14} /> No image address yet
 				</span>
 			);
 		}
@@ -398,9 +367,6 @@ export function CanvasView({
 	onEditing,
 	onContentHeight,
 	onMeasure,
-	sheets = false,
-	pictures = NO_PICTURES,
-	components,
 }: CanvasViewProps) {
 	const content = useRef<HTMLDivElement>(null);
 	const [over, setOver] = useState<DropTarget | null>(null);
@@ -573,7 +539,6 @@ export function CanvasView({
 				inputs={inputs}
 				fonts={layout.fonts}
 				host={{ id: block.id, attrs, place, className: marks(selected, overThis) }}
-				pictures={pictures}
 			/>
 		);
 	};
@@ -582,10 +547,7 @@ export function CanvasView({
 	const renderContainer = (container: MailContainer, topLevel: boolean) => {
 		const selected = selection?.id === container.id;
 		const overEnd = over !== null && over.parentId === container.id && over.beforeId === null;
-		// A placed component is drawn from the component, read-only: a click on
-		// anything inside it selects the placement, which is the unit that moves.
-		const placed = placementView(container, components);
-		const shown = (placed ?? container).children.filter((node) => !node.hidden);
+		const shown = container.children.filter((node) => !node.hidden);
 		return (
 			<div
 				key={container.id}
@@ -596,7 +558,7 @@ export function CanvasView({
 				onDragOver={(event) => dragOverTarget(event, { parentId: container.id, beforeId: null })}
 				onDragLeave={() => setOver(null)}
 				onDrop={(event) => finishDrag(event, { parentId: container.id, beforeId: null })}
-				style={sectionCss(placed ?? container, topLevel)}
+				style={sectionCss(container, topLevel)}
 				className={`outline-offset-[-2px] ${
 					selected
 						? "outline-2 outline-[var(--accent)]"
@@ -605,12 +567,7 @@ export function CanvasView({
 							: "hover:outline-1 hover:outline-[var(--line-strong)]"
 				}`}
 			>
-				{container.component && !placed ? (
-					<p data-canvas-chrome style={{ gridColumn: "1 / -1" }} className="flex-1 px-3 py-6 text-center text-micro text-[var(--canvas-ink-muted)]">
-						This component no longer exists
-					</p>
-				) : null}
-				{shown.length === 0 && !container.component && container.box.minHeight === null ? (
+				{shown.length === 0 && container.box.minHeight === null ? (
 					// Only on the canvas: an empty container is sent as nothing, and
 					// this is what there is to click and to drop onto. One with a
 					// height of its own is drawn at that height, because it is a
@@ -623,13 +580,7 @@ export function CanvasView({
 						{container.name} is empty
 					</p>
 				) : null}
-				{container.component ? (
-					<div style={{ display: "contents", pointerEvents: "none" }}>
-						{shown.map((node) => renderNode(node, container.id, false))}
-					</div>
-				) : (
-					shown.map((node) => renderNode(node, container.id, false))
-				)}
+				{shown.map((node) => renderNode(node, container.id, false))}
 			</div>
 		);
 	};
@@ -716,9 +667,9 @@ export function CanvasView({
 				color: "var(--canvas-ink)",
 				...MAIL_SHELL,
 				...fillCss(layout.fill),
-				background: sheets ? "transparent" : layout.fill ? undefined : "var(--canvas-paper)",
+				background: layout.fill ? undefined : "var(--canvas-paper)",
 			}}
-			className={sheets ? undefined : "shadow-[var(--shadow-popover)]"}
+			className="shadow-[var(--shadow-popover)]"
 			onClick={() => onSelect(null)}
 			onDragOver={(event) => dragOverTarget(event, { parentId: null, beforeId: null })}
 			onDrop={(event) => finishDrag(event, { parentId: null, beforeId: null })}

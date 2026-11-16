@@ -1,20 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-	ComponentPlacement,
-	DocumentComponent,
-	DocumentPaper,
-	MailBlock,
-	MailContainer,
-	MailLayout,
-	MailNode,
-	MailTextStyle,
-	TemplateInput,
-} from "@shared/types";
-import type { ComponentLookup } from "@shared/components";
-import { assetKeyOf, DEFAULT_PAPER, newPage, normaliseCanvas, pagesOf, paperPx } from "@shared/paper";
+import type { MailBlock, MailLayout, MailNode, MailTextStyle, TemplateInput } from "@shared/types";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
-import { PdfViewer } from "../../components/PdfViewer";
 import { messageOf } from "../../lib/errors";
 import { FONT_WEIGHTS } from "./mail/canvas/box-style";
 import { absorb, copyOverrides, layoutAt, widestFirst } from "./mail/canvas/breakpoints";
@@ -25,7 +12,6 @@ import {
 	firstChildOf,
 	insertNode,
 	insertTarget,
-	newContainer,
 	moveNode,
 	moveWithinParent,
 	parentOf,
@@ -64,69 +50,24 @@ import { mailPlaceholderGroups } from "./mail/placeholders";
 import { TemplateInputsEditor } from "./mail/TemplateInputsEditor";
 import { VisualEditor } from "./mail/VisualEditor";
 
-/**
- * One template as the editor holds it. A mail template has a subject and no
- * paper; a document template has paper and no subject.
- */
-export type CanvasDraft = {
+/** One mail template as the editor holds it. */
+type Draft = {
 	name: string;
 	description: string;
-	/** A mail template's subject. Null for a document, which has none. */
-	subject: string | null;
+	subject: string;
 	bodyHtml: string;
 	inputs: TemplateInput[];
 	layout: MailLayout | null;
-	/** A document's paper. Null for a mail template, which is read at any width. */
-	paper: DocumentPaper | null;
 };
 
-/** What the editor shows in its preview: a message as it will be sent, or the PDF a document prints as. */
-export type CanvasPreview =
-	| { kind: "html"; subject: string; html: string; missing: string[] }
-	| { kind: "pdf"; pdf: Uint8Array; missing: string[] };
-
-/** What the editor needs of a stored picture: the token a block names it with and where it is drawn from. */
-type PictureRow = { token: string; url: string };
-
-/**
- * Where a template comes from and goes to. The editor is the same for a
- * message and for a document; this is the part that is not.
- */
-export type CanvasSource = {
-	kind: "mail" | "document";
-	load: (id: string) => Promise<{ draft: CanvasDraft; unreviewed: boolean } | null>;
-	save: (id: string, draft: CanvasDraft) => Promise<void>;
-	preview: (id: string, draft: CanvasDraft) => Promise<CanvasPreview>;
-	/**
-	 * Where the pictures it keeps are stored, when that is not the document
-	 * template's own. A component keeps its own (decision 65).
-	 */
-	assets?: {
-		list: (id: string) => Promise<PictureRow[]>;
-		add: (id: string, file: { fileName: string; data: Uint8Array }) => Promise<PictureRow>;
-	};
-	/** One sheet and no more: a component is one piece of a page, so there is no adding a page. */
-	singlePage?: boolean;
-};
+/** What the editor shows in its preview: the message as it will be sent. */
+type Preview = { subject: string; html: string; missing: string[] };
 
 type CanvasTemplateEditorProps = {
 	templateId: string;
-	source: CanvasSource;
 	onBack: () => void;
 	onSaved: () => void;
-	/** Opens a component to edit it, from a placement in the template. The draft is saved first. */
-	onOpenComponent?: (componentId: string) => void;
-	/**
-	 * Flows what runs past the bottom of a page onto the pages after it as soon
-	 * as the canvas has been drawn, for a document that has just been imported
-	 * onto one page.
-	 */
-	flowOnOpen?: boolean;
 };
-
-type Draft = CanvasDraft;
-
-type Preview = CanvasPreview;
 
 /** The layouts an undo and a redo go back and forward to. */
 type History = { past: MailLayout[]; future: MailLayout[] };
@@ -164,67 +105,6 @@ function startingValues(inputs: TemplateInput[]): Record<string, string> {
 	return Object.fromEntries(inputs.filter((input) => input.defaultValue).map((input) => [input.key, input.defaultValue ?? ""]));
 }
 
-/** A document's canvas held to its paper, so a page cannot be dragged out of shape or a block left between pages. */
-function onPaper(layout: MailLayout, paper: DocumentPaper | null): MailLayout {
-	return paper ? normaliseCanvas({ version: 1, paper, layout }).layout : layout;
-}
-
-/**
- * Where a page runs past the bottom of its paper, the first child that does,
- * measured from what the canvas has drawn. Null when every page fits. A page
- * whose first child is already too tall has nothing that moving would fix.
- */
-function firstOverflow(layout: MailLayout, paper: DocumentPaper): { pageId: string; index: number } | null {
-	const { height } = paperPx(paper);
-	for (const page of pagesOf(layout)) {
-		const element = document.querySelector<HTMLElement>(`[data-canvas-content] [data-canvas-id="${CSS.escape(page.id)}"]`);
-		if (!element || element.offsetHeight <= height + 1) continue;
-		const floor = height - page.box.padding.bottom;
-		const shown = page.children.filter((node) => !node.hidden);
-		const index = shown.findIndex((node) => {
-			const child = element.querySelector<HTMLElement>(`[data-canvas-id="${CSS.escape(node.id)}"]`);
-			return child !== null && child.offsetTop - element.offsetTop + child.offsetHeight > floor;
-		});
-		if (index > 0) return { pageId: page.id, index: page.children.indexOf(shown[index]!) };
-	}
-	return null;
-}
-
-/** The pages that run past the bottom of the paper, by number, as the canvas draws them. */
-function overflowingPages(layout: MailLayout, paper: DocumentPaper): number[] {
-	const { height } = paperPx(paper);
-	return pagesOf(layout).flatMap((page, index) => {
-		const element = document.querySelector<HTMLElement>(`[data-canvas-content] [data-canvas-id="${CSS.escape(page.id)}"]`);
-		return element && element.offsetHeight > height + 1 ? [index + 1] : [];
-	});
-}
-
-/** Moves a page's children from `index` on to a new page straight after it. */
-function splitPage(layout: MailLayout, paper: DocumentPaper, pageId: string, index: number): MailLayout {
-	const children: MailNode[] = [];
-	for (const node of layout.children) {
-		if (node.id !== pageId || node.kind !== "container") {
-			children.push(node);
-			continue;
-		}
-		const next: MailContainer = { ...newPage(paper), box: { ...node.box }, layout: node.layout, children: node.children.slice(index) };
-		children.push({ ...node, children: node.children.slice(0, index) }, next);
-	}
-	return renamePages({ ...layout, children });
-}
-
-/** Pages keep the names their authors gave them; a page still called "Page n" is renumbered to where it now is. */
-function renamePages(layout: MailLayout): MailLayout {
-	let number = 0;
-	return {
-		...layout,
-		children: layout.children.map((node) => {
-			if (node.kind !== "container") return node;
-			number += 1;
-			return /^Page( \d+)?$/.test(node.name) ? { ...node, name: `Page ${number}` } : node;
-		}),
-	};
-}
 
 /** Every id in the tree and the order its parent holds it in, one level at a time: what a structural edit changes. */
 function shapeOf(layout: MailLayout): string {
@@ -262,7 +142,7 @@ function shapeOf(layout: MailLayout): string {
  * from it. A template without one is what everything written before the canvas
  * is, and it keeps the visual and code editors it has always had.
  */
-export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOpenComponent, flowOnOpen = false }: CanvasTemplateEditorProps) {
+export function MailTemplateEditor({ templateId, onBack, onSaved }: CanvasTemplateEditorProps) {
 	const [unreviewed, setUnreviewed] = useState(false);
 	const [loaded, setLoaded] = useState(false);
 	const [draft, setDraft] = useState<Draft | null>(null);
@@ -289,8 +169,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 	// when it was made, and to what.
 	const lastEdit = useRef<{ at: number; key: string } | null>(null);
 
-	// Stamped, so the PDF viewer knows a new print is a new file.
-	const [preview, setPreview] = useState<(Preview & { stamp: number }) | null>(null);
+	const [preview, setPreview] = useState<Preview | null>(null);
 	const [previewError, setPreviewError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -312,8 +191,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 
 	useEffect(() => {
 		let cancelled = false;
-		source
-			.load(templateId)
+		load(templateId)
 			.then((row) => {
 				if (cancelled) return;
 				if (!row) {
@@ -332,57 +210,8 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 		return () => {
 			cancelled = true;
 		};
-	}, [templateId, source]);
+	}, [templateId]);
 
-	// A document's pictures, drawn on the canvas from Juno's own origin and
-	// never from a path. Keyed the way an image block names one.
-	const [pictures, setPictures] = useState<Record<string, string>>({});
-	const refreshPictures = useCallback(() => {
-		if (source.kind !== "document") return;
-		(source.assets?.list ?? window.juno.templates.assets.list)(templateId)
-			.then((rows: PictureRow[]) =>
-				setPictures(Object.fromEntries(rows.map((row) => [assetKeyOf(row.token) ?? "", row.url]))),
-			)
-			.catch((cause: unknown) => setError(messageOf(cause)));
-	}, [source.kind, source.assets, templateId]);
-	useEffect(() => refreshPictures(), [refreshPictures]);
-
-	// The components a document may place, and their pictures, which belong to
-	// them and are drawn from their own files. A component can place other
-	// components, so the list is loaded for it too.
-	const [componentList, setComponentList] = useState<DocumentComponent[]>([]);
-	const [componentPictures, setComponentPictures] = useState<Record<string, string>>({});
-	useEffect(() => {
-		if (source.kind !== "document") return;
-		let cancelled = false;
-		window.juno.templates.components
-			.list()
-			.then(async (rows) => {
-				const found: Record<string, string> = {};
-				for (const row of rows) {
-					for (const asset of await window.juno.templates.components.assets.list(row.id)) {
-						found[assetKeyOf(asset.token) ?? ""] = asset.url;
-					}
-				}
-				if (cancelled) return;
-				setComponentList(rows.filter((row) => row.id !== templateId));
-				setComponentPictures(found);
-			})
-			.catch((cause: unknown) => {
-				if (!cancelled) setError(messageOf(cause));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [source.kind, templateId]);
-	const componentLookup = useCallback<ComponentLookup>(
-		(id) => {
-			const found = componentList.find((row) => row.id === id);
-			return found ? { id: found.id, name: found.name, root: found.root, fonts: found.fonts, inputs: found.inputs } : null;
-		},
-		[componentList],
-	);
-	const everyPicture = useMemo(() => ({ ...componentPictures, ...pictures }), [componentPictures, pictures]);
 
 	const draftKey = draft ? JSON.stringify(draft) : "";
 	const dirty = Boolean(draft) && draftKey !== savedKey;
@@ -392,7 +221,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 		setSaving(true);
 		setError(null);
 		try {
-			await source.save(templateId, draft);
+			await store(templateId, draft);
 			setSavedKey(JSON.stringify(draft));
 			setSavedAt(Date.now());
 			onSaved();
@@ -401,7 +230,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 		} finally {
 			setSaving(false);
 		}
-	}, [draft, onSaved, templateId, source]);
+	}, [draft, onSaved, templateId]);
 
 	// Autosave: a pause of 1.5s, or 15s after the oldest unsaved edit whichever
 	// comes first, and never when nothing changed. Written here rather than in
@@ -422,33 +251,26 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 	}, [dirty, draftKey, autosave, saving, save]);
 
 	// The preview is a read, so it runs whether or not anything is being saved,
-	// and it is debounced on its own clock. A document's preview is a real PDF,
-	// which takes a moment to print, so it is only made while it is looked at.
-	const printing = source.kind === "document";
-	const previewWanted = !printing || mode === "preview";
+	// and it is debounced on its own clock.
 	useEffect(() => {
-		if (!draft || !previewWanted) return;
+		if (!draft) return;
 		let cancelled = false;
 		const timer = window.setTimeout(() => {
-			source
-				.preview(templateId, draft)
+			previewOf(draft)
 				.then((result) => {
 					if (cancelled) return;
-					setPreview({ ...result, stamp: Date.now() });
+					setPreview(result);
 					setPreviewError(null);
 				})
 				.catch((cause: unknown) => {
 					if (!cancelled) setPreviewError(messageOf(cause));
 				});
-		}, printing ? 300 : 500);
+		}, 500);
 		return () => {
 			cancelled = true;
 			window.clearTimeout(timer);
 		};
-	}, [draftKey, draft, previewWanted, printing, source, templateId]);
-
-	// The PDF viewer reads its file by key; the bytes are already in hand.
-	const readPreview = useCallback(async () => (preview?.kind === "pdf" ? preview.pdf : new Uint8Array()), [preview]);
+	}, [draftKey, draft]);
 
 	const patch = useCallback((next: Partial<Draft>) => {
 		setDraft((current) => (current ? { ...current, ...next } : current));
@@ -474,7 +296,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 	// folded back by `restyleLayout`, and what is in it is changed on `layout`.
 	const shown = layout ? layoutAt(layout, active) : null;
 	const canvasFonts = useCanvasFonts(layout?.fonts ?? []);
-	const remote = useRemotePictures(preview?.kind === "html" ? preview.html : "");
+	const remote = useRemotePictures(preview ? preview.html : "");
 	// An undo can take away what was selected. What is gone is not selected.
 	const liveId = layout && selection && selectionIn(layout, selection.id) ? selection.id : null;
 	const live: Selection = liveId ? { id: liveId } : null;
@@ -495,7 +317,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 	 * on its heels, so a colour dragged across the picker is one step.
 	 */
 	function onLayout(given: MailLayout): void {
-		const next = onPaper(given, draft?.paper ?? null);
+		const next = given;
 		const current = draft?.layout ?? null;
 		if (current && next !== current) {
 			const now = Date.now();
@@ -544,152 +366,12 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 		patch({ layout: next });
 	}
 
-	/**
-	 * Where a new element lands: see insertTarget. On paper nothing lands
-	 * between the pages: what would have gone at the end of the frame goes at
-	 * the end of the last page instead. A page is added with "Add page".
-	 */
+	/** Where a new element lands: see insertTarget. */
 	function landing(structural: boolean, base = layout): { parentId: string | null; afterId: string | null } | null {
 		if (!base) return null;
-		const at = insertTarget(base, liveId && selectionIn(base, liveId) ? liveId : null, structural);
-		if (!draft?.paper || !at || at.parentId !== null) return at;
-		const pages = pagesOf(base);
-		const target = pages.find((page) => page.id === at.afterId) ?? pages[pages.length - 1];
-		return target ? { parentId: target.id, afterId: target.children[target.children.length - 1]?.id ?? null } : at;
+		return insertTarget(base, liveId && selectionIn(base, liveId) ? liveId : null, structural);
 	}
 
-	/** A new page at the end, in the paper's size and with the last page's margin. */
-	function addPage(): void {
-		if (!layout || !draft?.paper) return;
-		const pages = pagesOf(layout);
-		const last = pages[pages.length - 1];
-		const page = newPage(draft.paper, `Page ${pages.length + 1}`);
-		const shaped = last ? { ...page, box: { ...page.box, padding: last.box.padding, fill: last.box.fill } } : page;
-		onLayout({ ...layout, children: [...layout.children, shaped] });
-		setSelection({ id: shaped.id });
-	}
-
-	/**
-	 * Places a component: a container that holds a reference and the values it
-	 * was given, and none of the component's content. It lands where a new
-	 * element does, after what is selected or at the end of the last page.
-	 */
-	function placeComponent(componentId: string): void {
-		if (!layout) return;
-		const component = componentList.find((row) => row.id === componentId);
-		if (!component) return;
-		const placement: ComponentPlacement = { componentId, values: {} };
-		const node: MailContainer = { ...newContainer(layout, "div"), name: component.name, component: placement };
-		const at = landing(false);
-		if (!at) return;
-		onLayout(insertNode(layout, at.parentId, node, at.afterId));
-		setSelection({ id: node.id });
-	}
-
-	/**
-	 * Copies a placed component into the draft and drops the link. The service
-	 * does it against the draft, so pictures and inputs come along, and what
-	 * comes back is one more edit that can be undone and saved.
-	 */
-	async function detachComponent(nodeId: string): Promise<void> {
-		if (!layout || !draft?.paper || source.kind !== "document") return;
-		setError(null);
-		try {
-			const result = await window.juno.templates.components.detach({
-				templateId,
-				nodeId,
-				canvas: { version: 1, paper: draft.paper, layout },
-				inputs: draft.inputs,
-			});
-			onLayout(result.canvas.layout);
-			patch({ inputs: result.inputs });
-			refreshPictures();
-			setSelection({ id: nodeId });
-		} catch (cause: unknown) {
-			setError(messageOf(cause));
-		}
-	}
-
-	/** A different paper: every page is resized to it, and what is on them stays. */
-	function changePaper(paper: DocumentPaper): void {
-		if (!draft?.layout) return;
-		const layoutOnPaper = normaliseCanvas({ version: 1, paper, layout: draft.layout }).layout;
-		lastEdit.current = null;
-		setHistory((known) => ({ past: [...known.past.slice(-(HISTORY_DEPTH - 1)), draft.layout!], future: [] }));
-		patch({ paper, layout: layoutOnPaper });
-	}
-
-	// Pictures for a document are files the template keeps. A picture is
-	// chosen first and added once it has been stored, so cancelling the picker
-	// adds nothing; the same picker replaces the picture of a block.
-	const picker = useRef<HTMLInputElement>(null);
-	const pickFor = useRef<{ insert: ElementId } | { blockId: string } | null>(null);
-
-	function choosePicture(target: { insert: ElementId } | { blockId: string }): void {
-		pickFor.current = target;
-		picker.current?.click();
-	}
-
-	async function storePicture(file: File): Promise<void> {
-		const target = pickFor.current;
-		pickFor.current = null;
-		if (!target) return;
-		setError(null);
-		try {
-			const data = new Uint8Array(await file.arrayBuffer());
-			const asset = source.assets
-				? await source.assets.add(templateId, { fileName: file.name, data })
-				: await window.juno.templates.assets.add({ templateId, fileName: file.name, data });
-			refreshPictures();
-			const current = draftRef.current?.layout;
-			if (!current) return;
-			if ("blockId" in target) {
-				layoutHandler.current(updateBlock(current, target.blockId, { src: asset.token } as Partial<MailBlock>));
-				return;
-			}
-			const node = { ...newElement(current, target.insert), src: asset.token, alt: file.name.replace(/\.[a-z0-9]+$/i, "") } as MailNode;
-			const at = landing(false, current);
-			if (!at) return;
-			layoutHandler.current(insertNode(current, at.parentId, node, at.afterId));
-			setSelection({ id: node.id });
-			remember(target.insert);
-		} catch (cause: unknown) {
-			setError(messageOf(cause));
-		}
-	}
-
-	// What the page flow and the picture picker read and call, which run
-	// after a render that may already be stale: the latest draft, and the
-	// latest way to change it.
-	const draftRef = useRef(draft);
-	const layoutHandler = useRef(onLayout);
-	useEffect(() => {
-		draftRef.current = draft;
-		layoutHandler.current = onLayout;
-	});
-
-	// Pages that run past the bottom of the paper, measured after the canvas
-	// is drawn, and the flow that moves what runs past onto the pages after.
-	const [overflow, setOverflow] = useState<number[]>([]);
-	const [flowing, setFlowing] = useState(flowOnOpen);
-	useEffect(() => {
-		const paper = draft?.paper;
-		const current = draft?.layout;
-		if (!paper || !current || mode !== "canvas") return;
-		const frame = window.requestAnimationFrame(() => {
-			if (flowing) {
-				const at = firstOverflow(current, paper);
-				if (at) {
-					layoutHandler.current(splitPage(current, paper, at.pageId, at.index));
-					return;
-				}
-				setFlowing(false);
-			}
-			const pages = overflowingPages(current, paper);
-			setOverflow((known) => (known.join() === pages.join() ? known : pages));
-		});
-		return () => window.cancelAnimationFrame(frame);
-	}, [draft?.layout, draft?.paper, flowing, mode]);
 
 	/** Remembers what a group added, so its button and its letter add that next time. */
 	function remember(id: ElementId): void {
@@ -702,11 +384,6 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 	/** Adds one element of the toolbar, from its group's button or menu or from a key. */
 	function insertElement(id: ElementId): void {
 		if (!layout) return;
-		// A document carries its pictures, so one is chosen before it is placed.
-		if (draft?.paper && (id === "image" || id === "linked-image")) {
-			choosePicture({ insert: id });
-			return;
-		}
 		const node = newElement(layout, id);
 		const at = landing(node.kind === "container" || node.kind === "columns");
 		if (!at) return;
@@ -998,7 +675,6 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 		);
 	}
 
-	const paper = draft.paper;
 	const status = saving ? "Saving" : dirty ? (autosave ? "Unsaved" : "Not saved") : savedAt ? "Saved." : "";
 
 	return (
@@ -1012,7 +688,6 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 						onName={(name) => patch({ name })}
 						onDescription={(description) => patch({ description })}
 						onSubject={(subject) => patch({ subject })}
-						onAddPage={paper && layout && !source.singlePage ? addPage : null}
 						layout={shown}
 						selection={live}
 						onSelect={setSelection}
@@ -1021,7 +696,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 							if (layout) onLayout(moveNode(layout, id, target.parentId, target.beforeId));
 						}}
 						onStep={stepLayer}
-						onConvert={paper ? null : convert}
+						onConvert={convert}
 						unreviewed={unreviewed}
 						autosave={autosave}
 						onAutosave={(on) => {
@@ -1067,26 +742,8 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 						</p>
 					) : null}
 
-					{onCanvas && paper && overflow.length > 0 ? (
-						<div
-							role="status"
-							className="flex flex-none items-center gap-3 border-b border-[var(--line)] bg-[var(--warn-soft)] px-4 py-1.5 text-dense text-[var(--warn)]"
-						>
-							<span className="min-w-0 flex-1">
-								{overflow.length === 1 ? `Page ${overflow[0]} runs` : `Pages ${overflow.join(", ")} run`} past the bottom
-								of the paper. What is past it is cut off in the PDF.
-							</span>
-							<Button size="dense" disabled={flowing} onClick={() => setFlowing(true)}>
-								Flow onto the next pages
-							</Button>
-						</div>
-					) : null}
-
 					{onCanvas && layout && shown ? (
 						<CanvasStage
-							paper={paper}
-							pictures={everyPicture}
-							components={componentLookup}
 							layout={shown}
 							label={active ? (layout.breakpoints.find((entry) => entry.id === active)?.name ?? "") : "Default"}
 							inputs={draft.inputs}
@@ -1117,37 +774,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 						</div>
 					) : null}
 
-					{mode === "preview" && paper ? (
-						<div className="flex min-h-0 flex-1 flex-col pb-16">
-							{previewError ? (
-								<p
-									role="alert"
-									data-selectable
-									className="flex-none border-b border-[var(--line)] bg-[var(--risk-soft)] px-4 py-2 text-dense text-[var(--risk)]"
-								>
-									{previewError}
-								</p>
-							) : null}
-							<PdfViewer
-								fileKey={preview?.kind === "pdf" ? String(preview.stamp) : null}
-								read={readPreview}
-								caption={
-									preview && preview.missing.length > 0 ? (
-										<span className="truncate text-micro text-[var(--risk)]">
-											No value for: {preview.missing.join(", ")}
-										</span>
-									) : (
-										<span className="text-micro text-[var(--ink-muted)]">
-											Printed with the starting value of each input.
-										</span>
-									)
-								}
-								empty={<p className="p-6 text-center text-[var(--ink-muted)]">Printing.</p>}
-							/>
-						</div>
-					) : null}
-
-					{mode === "preview" && !paper ? (
+					{mode === "preview" ? (
 						<div className="flex min-h-0 flex-1 flex-col bg-[var(--sunken)]">
 							<div className="flex h-[40px] flex-none items-center justify-center gap-2 px-3">
 								{layout && shown ? (
@@ -1199,7 +826,7 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 									>
 										{previewError}
 									</p>
-								) : preview?.kind === "html" ? (
+								) : preview ? (
 									<div className="mx-auto" style={{ width: shown ? shown.width : PREVIEW_WIDTHS[previewWidth] }}>
 										<p className="truncate pb-2 text-dense font-[var(--weight-medium)]">
 											{preview.subject || "No subject yet"}
@@ -1283,21 +910,12 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 								<h2 className="text-h3">
 									What this asks for
 								</h2>
-								{paper ? (
-									<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
-										Everything that changes each time this document is made. Nothing is filled in from a
-										client or from your details: each input is typed by hand, or by an agent, when the
-										template is used. Write one as {"{{document.<key>}}"} in a text, or place it as an
-										input block. An image input is a picture chosen when the template is used.
-									</p>
-								) : (
-									<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
-										Everything that changes each time this message is sent. Nothing is filled in from a
-										client, a project or your details: each input is typed by hand, or by an agent, after
-										the recipient is chosen. Write one as {"{{document.<key>}}"} in a text, or place it as
-										an input block. An image input is a picture chosen when the template is used.
-									</p>
-								)}
+								<p className="mt-1 max-w-[62ch] text-sm text-[var(--ink-muted)]">
+									Everything that changes each time this message is sent. Nothing is filled in from a
+									client, a project or your details: each input is typed by hand, or by an agent, after
+									the recipient is chosen. Write one as {"{{document.<key>}}"} in a text, or place it as
+									an input block. An image input is a picture chosen when the template is used.
+								</p>
 								<div className="mt-4">
 									<TemplateInputsEditor
 										inputs={draft.inputs}
@@ -1318,7 +936,6 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 						mode={mode}
 						onMode={setMode}
 						hasLayout={layout !== null}
-						printed={paper !== null}
 						inputCount={draft.inputs.length}
 						help={help}
 						onHelp={setHelp}
@@ -1353,229 +970,54 @@ export function CanvasTemplateEditor({ templateId, source, onBack, onSaved, onOp
 							}}
 							onConvert={convertNode}
 							onSelect={setSelection}
-							paper={paper}
-							onPaper={changePaper}
-							pictures={everyPicture}
-							components={source.kind === "document" ? componentList : undefined}
-							onPlaceComponent={source.kind === "document" ? placeComponent : undefined}
-							onDetachComponent={source.kind === "document" && !source.singlePage ? (id) => void detachComponent(id) : undefined}
-							onOpenComponent={
-								onOpenComponent
-									? (id) => {
-											void (async () => {
-												if (dirty) await save();
-												onOpenComponent(id);
-											})();
-										}
-									: undefined
-							}
-							onPicture={(blockId) => choosePicture({ blockId })}
 						/>
 					</aside>
 				) : null}
 			</div>
-			{paper ? (
-				<input
-					ref={picker}
-					type="file"
-					accept="image/png,image/jpeg,image/gif,image/webp"
-					aria-label="Choose a picture"
-					className="hidden"
-					onChange={(event) => {
-						const file = event.target.files?.[0];
-						event.target.value = "";
-						if (file) void storePicture(file);
-						else pickFor.current = null;
-					}}
-				/>
-			) : null}
 		</div>
 	);
 }
 
-/** Reads a mail template into the editor and writes it back. */
-const MAIL_SOURCE: CanvasSource = {
-	kind: "mail",
-	async load(id) {
-		const row = await window.juno.mail.templates.get(id);
-		if (!row) return null;
-		return {
-			unreviewed: row.isSystem && row.customisedAt === null,
-			draft: {
-				name: row.name,
-				description: row.description ?? "",
-				subject: row.subject,
-				bodyHtml: row.bodyHtml,
-				inputs: row.inputs,
-				layout: row.layout,
-				paper: null,
-			},
-		};
-	},
-	async save(id, draft) {
-		await window.juno.mail.templates.update(id, {
-			name: draft.name,
-			description: draft.description.trim() || null,
-			subject: draft.subject ?? "",
-			bodyHtml: draft.bodyHtml,
-			inputs: draft.inputs,
-			layout: draft.layout,
-		});
-	},
-	async preview(_id, draft) {
-		const result = await window.juno.mail.templates.preview({
-			subject: draft.subject ?? "",
-			bodyHtml: draft.bodyHtml,
-			layout: draft.layout,
-			inputs: draft.inputs,
-			// What the template offers as a starting value is what it is
-			// previewed with, so a picture it asks for is drawn in place of a
-			// marker where its address should be.
-			extras: startingValues(draft.inputs),
-		});
-		return { kind: "html", subject: result.subject, html: result.bodyHtml, missing: result.missing };
-	},
-};
-
-/**
- * Reads a document template laid out on paper into the editor and writes it
- * back. Its preview is the PDF it prints as, with each input at its starting
- * value.
- */
-const DOCUMENT_SOURCE: CanvasSource = {
-	kind: "document",
-	async load(id) {
-		const row = await window.juno.templates.get(id);
-		if (!row?.canvas) return null;
-		return {
-			unreviewed: false,
-			draft: {
-				name: row.name,
-				description: row.description ?? "",
-				subject: null,
-				bodyHtml: row.bodyHtml,
-				inputs: row.inputs,
-				layout: row.canvas.layout,
-				paper: row.canvas.paper,
-			},
-		};
-	},
-	async save(id, draft) {
-		await window.juno.templates.update(id, {
-			name: draft.name,
-			description: draft.description.trim() || null,
-			inputs: draft.inputs,
-			...(draft.layout && draft.paper ? { canvas: { version: 1, paper: draft.paper, layout: draft.layout } } : {}),
-		});
-	},
-	async preview(id, draft) {
-		const result = await window.juno.templates.renderPdf({
-			templateId: id,
-			...(draft.layout && draft.paper ? { canvas: { version: 1, paper: draft.paper, layout: draft.layout } } : {}),
-			inputs: draft.inputs,
-			values: startingValues(draft.inputs),
-		});
-		return { kind: "pdf", pdf: result.pdf, missing: result.missing };
-	},
-};
-
-type TemplateEditorEntryProps = {
-	templateId: string;
-	onBack: () => void;
-	onSaved: () => void;
-	/** Opens a placed component to edit it. */
-	onOpenComponent?: (componentId: string) => void;
-};
-
-export function MailTemplateEditor(props: TemplateEditorEntryProps) {
-	return <CanvasTemplateEditor {...props} source={MAIL_SOURCE} />;
-}
-
-type DocumentCanvasEditorProps = TemplateEditorEntryProps & {
-	/** For a template just made from a Word file: flow it onto pages once it is drawn. */
-	flowOnOpen?: boolean;
-};
-
-export function DocumentCanvasEditor(props: DocumentCanvasEditorProps) {
-	return <CanvasTemplateEditor {...props} source={DOCUMENT_SOURCE} />;
-}
-
-/** The component alone on a sheet of A4, which is where it is drawn while it is edited. */
-function sheetOf(root: MailContainer, fonts: MailLayout["fonts"]): MailLayout {
-	const layout: MailLayout = {
-		version: 2,
-		width: 0,
-		widthMode: "fixed",
-		minHeight: 0,
-		fill: null,
-		fonts,
-		customCss: null,
-		children: [{ ...newPage(DEFAULT_PAPER, "Page 1"), children: [root] }],
-		breakpoints: [],
+/** Reads a mail template into the editor. */
+async function load(id: string): Promise<{ draft: Draft; unreviewed: boolean } | null> {
+	const row = await window.juno.mail.templates.get(id);
+	if (!row) return null;
+	return {
+		unreviewed: row.isSystem && row.customisedAt === null,
+		draft: {
+			name: row.name,
+			description: row.description ?? "",
+			subject: row.subject,
+			bodyHtml: row.bodyHtml,
+			inputs: row.inputs,
+			layout: row.layout,
+		},
 	};
-	return normaliseCanvas({ version: 1, paper: DEFAULT_PAPER, layout }).layout;
 }
 
-/**
- * What the sheet holds, as the component's content: the container on it, or
- * everything on it in a container of its own when it is no longer exactly one.
- */
-function rootOf(layout: MailLayout): MailContainer {
-	const page = pagesOf(layout)[0];
-	const only = page?.children.length === 1 ? page.children[0] : undefined;
-	if (only && only.kind === "container") return only;
-	return { ...newContainer(layout, "div"), name: "Content", children: page?.children ?? [] };
+/** Writes the draft back to the template. */
+async function store(id: string, draft: Draft): Promise<void> {
+	await window.juno.mail.templates.update(id, {
+		name: draft.name,
+		description: draft.description.trim() || null,
+		subject: draft.subject,
+		bodyHtml: draft.bodyHtml,
+		inputs: draft.inputs,
+		layout: draft.layout,
+	});
 }
 
-/**
- * Reads a component into the editor and writes it back. It is edited on a
- * sheet like a page, which shows how wide it will be when it is placed, and
- * saved as the container on it. Its preview is the PDF of that sheet.
- */
-const COMPONENT_SOURCE: CanvasSource = {
-	kind: "document",
-	singlePage: true,
-	assets: {
-		list: (id) => window.juno.templates.components.assets.list(id),
-		add: (id, file) => window.juno.templates.components.assets.add({ componentId: id, ...file }),
-	},
-	async load(id) {
-		const row = await window.juno.templates.components.get(id);
-		if (!row) return null;
-		return {
-			unreviewed: false,
-			draft: {
-				name: row.name,
-				description: row.description ?? "",
-				subject: null,
-				bodyHtml: "",
-				inputs: row.inputs,
-				layout: sheetOf(row.root, row.fonts),
-				paper: DEFAULT_PAPER,
-			},
-		};
-	},
-	async save(id, draft) {
-		if (!draft.layout) return;
-		await window.juno.templates.components.update(id, {
-			name: draft.name,
-			description: draft.description.trim() || null,
-			inputs: draft.inputs,
-			root: rootOf(draft.layout),
-			fonts: draft.layout.fonts,
-		});
-	},
-	async preview(id, draft) {
-		const result = await window.juno.templates.components.renderPdf({
-			componentId: id,
-			...(draft.layout && draft.paper ? { canvas: { version: 1, paper: draft.paper, layout: draft.layout } } : {}),
-			inputs: draft.inputs,
-			values: startingValues(draft.inputs),
-		});
-		return { kind: "pdf", pdf: result.pdf, missing: result.missing };
-	},
-};
-
-export function ComponentCanvasEditor(props: TemplateEditorEntryProps) {
-	return <CanvasTemplateEditor {...props} source={COMPONENT_SOURCE} />;
+/** The message as it will be sent, without storing anything. */
+async function previewOf(draft: Draft): Promise<Preview> {
+	const result = await window.juno.mail.templates.preview({
+		subject: draft.subject,
+		bodyHtml: draft.bodyHtml,
+		layout: draft.layout,
+		inputs: draft.inputs,
+		// What the template offers as a starting value is what it is
+		// previewed with, so a picture it asks for is drawn in place of a
+		// marker where its address should be.
+		extras: startingValues(draft.inputs),
+	});
+	return { subject: result.subject, html: result.bodyHtml, missing: result.missing };
 }

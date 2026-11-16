@@ -24,7 +24,6 @@ import * as calendar from "./calendar";
 import * as calendarSubscriptions from "./calendar-subscriptions";
 import * as clientEmails from "./client-emails";
 import * as clients from "./clients";
-import * as documentTemplates from "./document-templates";
 import * as documents from "./documents";
 import * as mailDocuments from "./document-mail";
 import * as outbox from "./mail-outbox";
@@ -45,7 +44,7 @@ const OWN_NEW: Record<BlankArea, MenuEntry | null> = {
 	projects: { id: "new-project", label: "New project", icon: "projects" },
 	mail: { id: "new-message", label: "New message", icon: "mail" },
 	notes: { id: "new-note", label: "New note", icon: "note" },
-	documents: { id: "new-document", label: "New document", icon: "documents" },
+	documents: { id: "new-page", label: "New page", icon: "documents" },
 };
 
 const EVERYWHERE: MenuEntry[] = [
@@ -76,7 +75,6 @@ function blank(area: string, context: MenuRequest["context"]): MenuEntry[] {
 		return [
 			{ id: "add-files", label: "Add files", icon: "import" },
 			{ id: "new-page", label: "New page", icon: "documents", separatorBefore: true },
-			{ id: "new-document", label: "Document from template", icon: "templates" },
 			...EVERYWHERE.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
 		];
 	}
@@ -252,16 +250,6 @@ export async function entriesFor(request: MenuRequest, db: Db = getDb()): Promis
 
 		case "attachment":
 			return attachmentEntries(id, context, db);
-
-		case "document-template": {
-			if (!(await documentTemplates.get(id, db))) return [];
-			return [
-				{ id: "preview", label: "Open preview", icon: "visible", accelerator: "Space" },
-				{ id: "edit", label: "Edit", icon: "edit", accelerator: "Enter" },
-				{ id: "use-template", label: "Use", icon: "documents" },
-				{ ...REMOVE, accelerator: "Delete" },
-			];
-		}
 
 		case "mail": {
 			const thread = await threads.getThread(id, db);

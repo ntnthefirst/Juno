@@ -1,7 +1,5 @@
 import { useState } from "react";
 import type {
-	DocumentComponent,
-	DocumentPaper,
 	MailAction,
 	MailBlock,
 	MailBoxStyle,
@@ -20,7 +18,6 @@ import type {
 	TemplateInput,
 	MailVerticalAlign,
 } from "@shared/types";
-import { assetKeyOf, PAPER_LABELS, PAPER_SIZES, paperMm } from "@shared/paper";
 import { Button } from "../../../../components/Button";
 import type { IconName } from "../../../../components/Icon";
 import { isMac } from "../../../../lib/platform";
@@ -39,7 +36,6 @@ import {
 } from "./alignment";
 import { PictureAddressNotice } from "./PictureAddressNotice";
 import { ActionsSection } from "./ActionsSection";
-import { ComponentSection, ComponentsSection } from "./ComponentPanel";
 import { flowAutoSides, pictureAutoSides, type AutoSides } from "./box-style";
 import { BreakpointsSection } from "./BreakpointsSection";
 import {
@@ -143,18 +139,6 @@ type DesignPanelProps = {
 	onConvert: (nodeId: string) => void;
 	/** Points the panel at another node, which a cell removed from its table needs to hand back to the table. */
 	onSelect: (selection: Selection) => void;
-	/** A document's paper. The frame is the paper and every top-level container a page of it. Null for mail. */
-	paper?: DocumentPaper | null;
-	onPaper?: (paper: DocumentPaper) => void;
-	/** A document's pictures, by key, to say whether a block's picture is still stored. */
-	pictures?: Record<string, string>;
-	/** The components a document can place, with what places and detaches them. */
-	components?: DocumentComponent[];
-	onPlaceComponent?: (componentId: string) => void;
-	onDetachComponent?: (nodeId: string) => void;
-	onOpenComponent?: (componentId: string) => void;
-	/** Opens the picker to choose a picture for an image block, for a document. */
-	onPicture?: (blockId: string) => void;
 };
 
 type BoxPatch = (patch: Partial<MailBoxStyle>) => void;
@@ -741,8 +725,6 @@ type ContentProps = {
 	block: Exclude<MailBlock, { kind: "html" }>;
 	inputs: TemplateInput[];
 	set: (patch: Partial<MailBlock>) => void;
-	/** For a document: its picture is a file it keeps, chosen rather than typed. */
-	picture?: { stored: boolean; onChoose: () => void } | null;
 };
 
 /**
@@ -751,7 +733,7 @@ type ContentProps = {
  * which input an input block is. Text and headings are typed on the canvas and
  * have nothing here.
  */
-function ContentSection({ block, inputs, set, picture = null }: ContentProps) {
+function ContentSection({ block, inputs, set }: ContentProps) {
 	switch (block.kind) {
 		case "button":
 			return (
@@ -773,22 +755,6 @@ function ContentSection({ block, inputs, set, picture = null }: ContentProps) {
 				</PanelSection>
 			);
 		case "image":
-			if (picture) {
-				return (
-					<PanelSection title="Image">
-						<Button size="dense" onClick={picture.onChoose}>
-							{picture.stored ? "Replace the picture" : "Choose a picture"}
-						</Button>
-						<TextInput
-							label="Alt text"
-							value={block.alt}
-							placeholder="What it shows"
-							onChange={(next) => set({ alt: next } as Partial<MailBlock>)}
-						/>
-						<PanelNote>A PNG, JPEG, GIF or WebP file, kept with the template and printed into the PDF.</PanelNote>
-					</PanelSection>
-				);
-			}
 			return (
 				<PanelSection title="Image">
 					<TextInput
@@ -1004,14 +970,6 @@ export function DesignPanel({
 	onRemove,
 	onConvert,
 	onSelect,
-	paper = null,
-	onPaper,
-	pictures = {},
-	onPicture,
-	components,
-	onPlaceComponent,
-	onDetachComponent,
-	onOpenComponent,
 }: DesignPanelProps) {
 	// A container, a columns table or a block, anywhere in the tree; a cell,
 	// which is none of those, separately. Both are found by id alone, so a
@@ -1021,8 +979,7 @@ export function DesignPanel({
 	const cell = selection && !node ? findCell(layout, selection.id) : null;
 	const colors = colorsIn(layout, selection?.id ?? null);
 	const recolor = (from: string, to: string) => onReplace(replaceColor(layout, selection?.id ?? null, from, to));
-	// Paper has one width, so a document has no breakpoints.
-	const breakpoints = paper ? null : <BreakpointsSection layout={base} active={active} onActive={onActive} onLayout={onBase} />;
+	const breakpoints = <BreakpointsSection layout={base} active={active} onActive={onActive} onLayout={onBase} />;
 	const structure = (change: (canvas: MailLayout) => MailLayout) => onBase(change(base));
 	// Actions are content: a link or a hover is the same at every width, so they
 	// go to the stored canvas like a tag does and never to a breakpoint.
@@ -1031,51 +988,10 @@ export function DesignPanel({
 			actions={actions}
 			clickBlocked={clickBlockedReason(layout, id)}
 			wholeBox={wholeBox}
-			hover={!paper}
+			hover
 			onActions={(next) => structure((canvas) => setActions(canvas, id, next))}
 		/>
 	);
-
-	if (!node && !cell && paper) {
-		const mm = paperMm(paper);
-		return (
-			<div className="flex flex-col">
-				<Header label="Paper" />
-				<PanelSection title="Paper">
-					<PanelSelect
-						label="Paper size"
-						value={paper.size}
-						options={PAPER_SIZES.map((size) => ({ value: size, label: PAPER_LABELS[size] }))}
-						onChange={(size) => onPaper?.({ ...paper, size: size as DocumentPaper["size"] })}
-					/>
-					<PanelSelect
-						label="Orientation"
-						value={paper.orientation}
-						options={[
-							{ value: "portrait", label: "Portrait" },
-							{ value: "landscape", label: "Landscape" },
-						]}
-						onChange={(orientation) =>
-							onPaper?.({ ...paper, orientation: orientation === "landscape" ? "landscape" : "portrait" })
-						}
-					/>
-					<PanelNote>
-						Every page is {Math.round(mm.width * 10) / 10} by {Math.round(mm.height * 10) / 10} mm and prints as one
-						sheet. A page&apos;s padding is its margin. What runs past the bottom of a page is cut off in the PDF.
-					</PanelNote>
-				</PanelSection>
-				<FontsSection
-					fonts={layout.fonts}
-					onChange={(next) => onLayout({ fonts: next })}
-					status={fonts.status}
-					onRetry={fonts.retry}
-					printed
-				/>
-				{components && onPlaceComponent ? <ComponentsSection components={components} onPlace={onPlaceComponent} /> : null}
-				<SelectionColors colors={colors} onReplace={recolor} />
-			</div>
-		);
-	}
 
 	if (!node && !cell) {
 		const floor = Math.ceil(contentHeight);
@@ -1444,14 +1360,6 @@ export function DesignPanel({
 					block={block}
 					inputs={inputs}
 					set={set}
-					picture={
-						paper && block.kind === "image" && onPicture
-							? {
-									stored: Boolean(pictures[assetKeyOf(block.src) ?? ""]),
-									onChoose: () => onPicture(block.id),
-								}
-							: null
-					}
 				/>
 				<SelectionColors colors={colors} onReplace={recolor} />
 				{box ? <CustomCssSection css={box.customCss} onChange={(customCss) => onBox({ customCss })} /> : null}
@@ -1464,38 +1372,12 @@ export function DesignPanel({
 	// table and a block each returned their own panel above.
 	if (!node || node.kind !== "container") return null;
 	const section = node;
-	if (section.component) {
-		const placed = section.component;
-		const source = components?.find((component) => component.id === placed.componentId) ?? null;
-		return (
-			<div className="flex flex-col">
-				<Header
-					label="Component"
-					name={{ value: section.name, onChange: (name) => onSection(section.id, { name }) }}
-					deleteLabel="Delete component"
-					onDelete={() => onRemove(section.id)}
-					hidden={{ value: section.hidden, onChange: (hidden) => onSection(section.id, { hidden }) }}
-				/>
-				<ComponentSection
-					placement={placed}
-					component={source}
-					inputs={inputs}
-					onPlacement={(next) => onSection(section.id, { component: next })}
-					onDetach={() => onDetachComponent?.(section.id)}
-					onOpen={() => onOpenComponent?.(placed.componentId)}
-				/>
-			</div>
-		);
-	}
 	const placer = placerOf(layout, section.id);
 	const arrangement = section.layout;
 	const onSectionBox: BoxPatch = (patch) => onSection(section.id, { box: { ...section.box, ...patch } });
 	const patchLayout = (next: MailSectionLayout) => onSection(section.id, { layout: next });
 	const spread = spreadOf(arrangement);
-	// On paper a top-level container is a page: the paper decides its size and
-	// its place, and its padding is the page margin.
-	const isPage = paper !== null && base.children.some((child) => child.id === section.id);
-	const label = isPage ? "Page" : CONTAINER_TAG_LABELS[section.tag];
+	const label = CONTAINER_TAG_LABELS[section.tag];
 
 	return (
 		<div className="flex flex-col">
@@ -1507,7 +1389,6 @@ export function DesignPanel({
 				onDelete={() => onRemove(section.id)}
 			/>
 
-			{isPage ? null : (
 			<ElementSection
 				label="Container element"
 				value={section.tag}
@@ -1517,27 +1398,20 @@ export function DesignPanel({
 				}))}
 				onChange={(tag) => structure((canvas) => setContainerTag(canvas, section.id, tag as MailContainerTag))}
 			/>
-			)}
 
 			{/* In the frame or a cell a container fills the width or has its own, and
 			    hugs what is in it or has a height; in a flex or grid parent it is
 			    sized the way a block is. An empty one with a height is a divider or
 			    a gap. */}
-			{isPage ? (
-				<PanelSection title="Position">
-					<PanelNote>A page is the size of the paper. Change the paper with nothing selected.</PanelNote>
-				</PanelSection>
-			) : (
-				<PanelSection title="Position">
-					<PlacementRows node={section} placer={placer} onPatch={(patch) => onSection(section.id, patch)} />
-					<SizeFields
-						node={asSized(section)}
-						placer={placer}
-						measured={measured}
-						onPatch={(patch) => onSection(section.id, placementOf(patch))}
-					/>
-				</PanelSection>
-			)}
+			<PanelSection title="Position">
+				<PlacementRows node={section} placer={placer} onPatch={(patch) => onSection(section.id, patch)} />
+				<SizeFields
+					node={asSized(section)}
+					placer={placer}
+					measured={measured}
+					onPatch={(patch) => onSection(section.id, placementOf(patch))}
+				/>
+			</PanelSection>
 
 			<PanelSection
 				title="Layout"
@@ -1618,43 +1492,35 @@ export function DesignPanel({
 					</PanelNote>
 				) : null}
 
-				{isPage ? null : (
-					<PanelCheckbox label="Clip content" checked={section.box.clip} onChange={(clip) => onSectionBox({ clip })} />
-				)}
+				<PanelCheckbox label="Clip content" checked={section.box.clip} onChange={(clip) => onSectionBox({ clip })} />
 
-				{paper ? null : (
-					<PanelNote tone="warn">
-						Outlook on Windows stacks this container into one column and drops the gap and the alignment.
-					</PanelNote>
-				)}
+				<PanelNote tone="warn">
+					Outlook on Windows stacks this container into one column and drops the gap and the alignment.
+				</PanelNote>
 			</PanelSection>
 
 			<SpacingSection
 				padding={{ value: section.box.padding, onChange: (padding) => onSectionBox({ padding }) }}
-				margin={
-					isPage
-						? null
-						: {
-								value: section.box.margin,
-								onChange: (margin) => onSectionBox({ margin }),
-								auto: flowAutoSides(section, placer === null),
-							}
-				}
+				margin={{
+					value: section.box.margin,
+					onChange: (margin) => onSectionBox({ margin }),
+					auto: flowAutoSides(section, placer === null),
+				}}
 			/>
 			<AppearanceSection
-				hidden={isPage ? undefined : section.hidden}
-				onHidden={isPage ? undefined : (hidden) => onSection(section.id, { hidden })}
+				hidden={section.hidden}
+				onHidden={(hidden) => onSection(section.id, { hidden })}
 				box={section.box}
 				onBox={onSectionBox}
-				radius={isPage ? null : { value: section.box.borderRadius, onChange: (next) => onSectionBox({ borderRadius: next }) }}
+				radius={{ value: section.box.borderRadius, onChange: (next) => onSectionBox({ borderRadius: next }) }}
 			/>
 			<FillSection fill={section.box.fill} onFill={(fill) => onSectionBox({ fill })} />
 			<StrokeSection box={section.box} onBox={onSectionBox} />
 			<EffectsSection box={section.box} onBox={onSectionBox} />
-			{isPage ? null : actionsFor(section.id, section.actions)}
+			{actionsFor(section.id, section.actions)}
 			<SelectionColors colors={colors} onReplace={recolor} />
 			<CustomCssSection css={section.box.customCss} onChange={(customCss) => onSectionBox({ customCss })} />
-			{isPage ? null : <ConvertSection what="group" onConvert={() => onConvert(section.id)} />}
+			<ConvertSection what="group" onConvert={() => onConvert(section.id)} />
 		</div>
 	);
 }

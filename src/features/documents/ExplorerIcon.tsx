@@ -15,13 +15,6 @@ type ExplorerIconProps = {
  * attachment, so a Word file looks the same in both places.
  */
 export function ExplorerIcon({ item, size = 18 }: ExplorerIconProps) {
-	if (item.kind === "template") {
-		return (
-			<span className="flex-none text-[var(--accent)]">
-				<Icon name="templates" size={size} />
-			</span>
-		);
-	}
 	const { record } = item;
 	if (record.sourceKind === "page") {
 		return (

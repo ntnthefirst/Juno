@@ -72,4 +72,28 @@ describe("the preview zoom", () => {
 		expect(zoomCommandFor(key({ key: "=", code: "Equal", ctrlKey: true, altKey: true }), false)).toBeNull();
 		expect(zoomCommandFor(key({ key: "c", code: "KeyC", ctrlKey: true }), false)).toBeNull();
 	});
+
+	it("reads the modifiers of a real event, which keeps them as getters on its prototype", () => {
+		class Pressed {
+			get key() {
+				return "=";
+			}
+			get code() {
+				return "Equal";
+			}
+			get ctrlKey() {
+				return true;
+			}
+			get metaKey() {
+				return false;
+			}
+			get altKey() {
+				return false;
+			}
+			get shiftKey() {
+				return false;
+			}
+		}
+		expect(zoomCommandFor(new Pressed(), false)).toBe("in");
+	});
 });

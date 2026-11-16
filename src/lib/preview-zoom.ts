@@ -80,8 +80,17 @@ export type ZoomCommand = "in" | "out" | "fit";
  * physical key, because on a Belgian keyboard the unshifted 0 types `à`.
  */
 export function zoomCommandFor(event: KeyLike, mac?: boolean): ZoomCommand | null {
-	// The modifiers alone, checked the way every other shortcut checks them.
-	if (!matchesCombo({ ...event, key: "0", code: "Digit0", shiftKey: false }, ZOOM_COMBOS.fit, mac)) return null;
+	// The modifiers alone, checked the way every other shortcut checks them. Read
+	// one by one: a KeyboardEvent keeps them as getters, which a spread drops.
+	const modifiers = {
+		key: "0",
+		code: "Digit0",
+		ctrlKey: event.ctrlKey,
+		metaKey: event.metaKey,
+		altKey: event.altKey,
+		shiftKey: false,
+	};
+	if (!matchesCombo(modifiers, ZOOM_COMBOS.fit, mac)) return null;
 	if (event.key === "+" || event.key === "=" || event.code === "NumpadAdd") return "in";
 	if (event.key === "-" || event.key === "_" || event.code === "NumpadSubtract") return "out";
 	if (event.code === "Digit0" || event.code === "Numpad0") return "fit";

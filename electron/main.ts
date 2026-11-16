@@ -8,7 +8,7 @@
  * 5. IPC registered, guard first.
  * 6. Window last, so it never paints against a half-built backend.
  */
-import { app, BrowserWindow, dialog, globalShortcut, Menu, nativeImage, nativeTheme, shell } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, Menu, nativeImage, nativeTheme, powerSaveBlocker, shell } from "electron";
 import { join } from "node:path";
 import { closeDb, getConnection, openDb } from "./main/db";
 import { runMigrations } from "./main/db/migrate";
@@ -442,6 +442,7 @@ if (!app.requestSingleInstanceLock()) {
 									{ name: "projects", nav: "projects", text: ["No projects yet"] },
 									{ name: "reminders", nav: null, text: [] },
 									{ name: "notes", nav: "notes", text: ["No notes yet"] },
+									{ name: "files", nav: "files", text: ["No files yet", "Add files"] },
 									{ name: "mail", nav: "mail", text: ["No mail accounts yet"] },
 								];
 								for (const step of emptyChecks) {
@@ -495,6 +496,17 @@ if (!app.requestSingleInstanceLock()) {
 								console.log("SMOKE_DEMO empty states=ok");
 							}
 
+							// A contract printed the way Convert to PDF prints, kept in the walk below.
+							const offerPdf = (
+								await printPdf({
+									title: "Ontwikkelovereenkomst",
+									bodyHtml:
+										"<h1>Ontwikkelovereenkomst</h1><p>Tussen Juno en obet, voor het ontwerp en de bouw van een website.</p>" +
+										"<h2>Artikel 1. Omvang</h2><p>Het ontwerp, de bouw en de oplevering van de site, met drie rondes feedback.</p>" +
+										"<h2>Artikel 2. Prijs</h2><p>De prijs is 2 100,00 euro, te betalen bij oplevering.</p>",
+									isSpecimen: false,
+								})
+							).toString("base64");
 							const created = (await window.webContents.executeJavaScript(`(async () => {
 								const b = window.juno;
 								const statuses = await b.reference.getSet("client_status");
@@ -529,118 +541,19 @@ if (!app.requestSingleInstanceLock()) {
 									{ type: "text", text: "" },
 								] });
 								await b.settings.setOwner({ businessName: "Juno", firstName: "Nathan", lastName: "Peeters", addressLine1: "Kerkstraat 1", postalCode: "9000", city: "Gent", vatNumber: "BE0123456789", establishmentNumber: "2123456789" });
-								// Phase 1: generate a document through the same bridge the
-								// interface uses, so the smoke run covers it too.
-								// A first install holds one document template and no other: the
-								// example, written as an ordinary template. Nothing here may look it
-								// up by key, because that is not how anyone finds it.
-								const seededTemplates = await b.templates.list();
-								if (seededTemplates.length !== 1) throw new Error("Smoke: a first install should hold exactly one document template, found " + seededTemplates.length);
-								const tpl = seededTemplates[0];
-								if (tpl.isSystem || tpl.reviewedAt !== null || !tpl.canvas || tpl.canvas.layout.children.length < 2 || tpl.inputs.length === 0) {
-									throw new Error("Smoke: the example is not an unreviewed template on the canvas that asks for inputs: " + JSON.stringify({ isSystem: tpl.isSystem, reviewedAt: tpl.reviewedAt, pages: tpl.canvas?.layout.children.length, inputs: tpl.inputs.length }));
-								}
-								const exampleValues = Object.fromEntries(tpl.inputs.map((input) => [input.key, input.defaultValue ?? "het ontwerp en de bouw van een website"]));
-								const gen = await b.documents.generate({
-									clientId: made[0].id, templateId: tpl.id, projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
-									extras: exampleValues,
+								// Phase 1: a contract kept under the client and its project, as a
+								// file brought in through the same bridge the interface uses. The
+								// PDF was printed by the main process below, so the print path is
+								// covered too.
+								const offerBytes = Uint8Array.from(atob(${JSON.stringify(offerPdf)}), (c) => c.charCodeAt(0));
+								const offer = await b.documents.importFile({
+									source: { kind: "bytes", fileName: "Ontwikkelovereenkomst.pdf", data: offerBytes },
+									clientId: made[0].id,
+									projectId: (await b.projects.list({ clientId: made[0].id }))[0]?.id ?? null,
 								});
-								// Every placeholder answered by the records and the inputs above. A
-								// marker left in the example would be printed in the first document
-								// anyone makes from it.
-								if (gen.missing.length !== 0) throw new Error("Smoke: the example left placeholders unresolved: " + gen.missing.join(", "));
-								if (!gen.document.isSpecimen) throw new Error("Smoke: a document from an unreviewed template is not marked as a specimen");
-								// A hand-written document template, HTML only, for the same reason as
-								// the mail one further down: the walk reads it in the code view and starts a
-								// page layout on it, and the example is already laid out.
-								await b.templates.create({
-									name: "Handgeschreven overeenkomst",
-									bodyHtml: "<h1>Overeenkomst</h1><p>Tussen {{ owner.businessName }} en {{ client.name }}.</p>",
-								});
-								// A template laid out on paper, which fills in what it asks for and
-								// nothing else. Printed through the bridge before anyone is chosen to
-								// receive it, then generated for a client, which must give a document
-								// that says what was typed and nothing taken from the client.
-								const paperTemplate = await b.templates.create({ name: "Offerte op papier" });
-								if (!paperTemplate.canvas) throw new Error("Smoke: a new document template is not laid out on paper");
-								const firstPage = paperTemplate.canvas.layout.children[0];
-								if (!firstPage || firstPage.kind !== "container") throw new Error("Smoke: a new canvas has no page");
-								const scopeText = {
-									id: "smoke-scope", kind: "text", tag: "p", grow: 0, alignSelf: "auto", hidden: false, actions: [],
-									html: "Omvang: {{document.omvang}}",
-									text: { color: null, fontFamily: null, fontSize: null, lineHeight: null, letterSpacing: null, weight: "normal", italic: false, decoration: "none", transform: "none", align: "left", verticalAlign: "top" },
-									box: { ...firstPage.box, fill: null, padding: { top: 0, right: 0, bottom: 0, left: 0 }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, width: null, minHeight: null, clip: false },
-								};
-								await b.templates.update(paperTemplate.id, {
-									inputs: [{ key: "omvang", label: "Omvang", kind: "textarea", required: true }],
-									canvas: { ...paperTemplate.canvas, layout: { ...paperTemplate.canvas.layout, children: [{ ...firstPage, children: [scopeText] }] } },
-								});
-								const printedPaper = await b.templates.renderPdf({ templateId: paperTemplate.id, values: { omvang: "Een website" } });
-								if (printedPaper.missing.length !== 0 || String.fromCharCode(...printedPaper.pdf.slice(0, 4)) !== "%PDF") {
-									throw new Error("Smoke: a canvas template did not print: " + printedPaper.missing.join(", "));
-								}
-								// A long text on one page with a picture the template keeps, for the
-								// editor's page flow and the picture route below.
-								const longTemplate = await b.templates.create({ name: "Lange tekst op papier" });
-								const longPage = longTemplate.canvas.layout.children[0];
-								const pixel = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
-								const logo = await b.templates.assets.add({ templateId: longTemplate.id, fileName: "logo.png", data: pixel });
-								const logoBlock = { id: "smoke-logo", kind: "image", src: logo.token, alt: "Logo", width: 48, align: "left", grow: 0, alignSelf: "start", hidden: false, actions: [], box: scopeText.box };
-								const paragraphs = Array.from({ length: 70 }, (_, index) => ({ ...scopeText, id: "smoke-long-" + index, html: "Artikel " + (index + 1) + ". Deze tekst loopt door tot ver voorbij de onderkant van het blad." }));
-								await b.templates.update(longTemplate.id, {
-									canvas: { ...longTemplate.canvas, layout: { ...longTemplate.canvas.layout, children: [{ ...longPage, children: [logoBlock, ...paragraphs] }] } },
-								});
-								// A component placed in a template (decision 65): a letterhead that
-								// asks for a reference, with a picture it keeps, placed with a value.
-								// Its text has to reach the template's PDF and its generated document.
-								const letterhead = await b.templates.components.create({
-									name: "Briefhoofd",
-									inputs: [{ key: "reference", label: "Referentie", kind: "text", required: true }],
-									root: {
-										id: "smoke-letterhead", kind: "container", tag: "div", hidden: false, name: "Briefhoofd", alignSelf: "auto", grow: 0,
-										layout: { kind: "flex", direction: "column", justify: "start", align: "stretch", gap: 4, wrap: false },
-										box: { ...scopeText.box }, actions: [],
-										children: [{ ...scopeText, id: "smoke-letterhead-text", html: "<strong>Juno</strong><br>Onze referentie: {{document.reference}}" }],
-									},
-								});
-								const letterheadLogo = await b.templates.components.assets.add({ componentId: letterhead.id, fileName: "logo.png", data: pixel });
-								await b.templates.components.update(letterhead.id, {
-									root: { ...letterhead.root, children: [{ ...letterhead.root.children[0], id: "smoke-letterhead-text" }, { ...logoBlock, id: "smoke-letterhead-logo", src: letterheadLogo.token }] },
-								});
-								const placedTemplate = await b.templates.create({ name: "Offerte met briefhoofd" });
-								const placedPage = placedTemplate.canvas.layout.children[0];
-								await b.templates.update(placedTemplate.id, {
-									canvas: {
-										...placedTemplate.canvas,
-										layout: {
-											...placedTemplate.canvas.layout,
-											children: [{
-												...placedPage,
-												children: [
-													{ ...letterhead.root, id: "smoke-placement", name: "Briefhoofd", children: [], component: { componentId: letterhead.id, values: { reference: "OFF-2026-14" } } },
-													{ ...scopeText, id: "smoke-placed-text", html: "Omvang: {{document.omvang}}" },
-												],
-											}],
-										},
-									},
-									inputs: [{ key: "omvang", label: "Omvang", kind: "textarea", required: true }],
-								});
-								const placedPdf = await b.templates.renderPdf({ templateId: placedTemplate.id, values: { omvang: "Een website" } });
-								if (placedPdf.missing.length !== 0) throw new Error("Smoke: a template with a component left gaps: " + placedPdf.missing.join(", "));
-								const placedDocument = await b.documents.generate({ clientId: made[0].id, templateId: placedTemplate.id, extras: { omvang: "Een website" } });
-								if (placedDocument.pdfError !== null || !placedDocument.document.bodyHtml.includes("Onze referentie: OFF-2026-14") || !placedDocument.document.bodyHtml.includes("data:image/png;base64,")) {
-									throw new Error("Smoke: the component did not reach the generated document: " + placedDocument.pdfError);
-								}
-								const paperDocument = await b.documents.generate({ clientId: made[0].id, templateId: paperTemplate.id, extras: { omvang: "Een website" } });
-								if (paperDocument.pdfError !== null || !paperDocument.document.bodyHtml.includes("Omvang: Een website")) {
-									throw new Error("Smoke: a canvas template did not generate its document: " + paperDocument.pdfError);
-								}
-								// Generating writes the PDF now, so this call is only here to
-								// prove the explicit path still works. What generating produced is
-								// checked from the main process below, where the file is reachable.
-								if (gen.pdfError !== null) throw new Error("Smoke: generating did not write a PDF, " + gen.pdfError);
-								if (!gen.document.pdfPath) throw new Error("Smoke: the generated document has no PDF path");
-								await b.documents.renderPdf(gen.document.id);
+								if (!offer.pdfPath) throw new Error("Smoke: the contract has no file");
+								// A first install has no document templates any more (decision 82).
+								if ("templates" in b) throw new Error("Smoke: the bridge still offers document templates");
 
 								// Phase 2: a few reminders across the buckets, plus a delivered
 								// project so a suggestion appears.
@@ -687,12 +600,12 @@ if (!app.requestSingleInstanceLock()) {
 								const synced = await b.mail.sync.run();
 								if (synced.some((s) => s.phase !== "done")) throw new Error("Smoke: mail sync did not finish: " + JSON.stringify(synced));
 
-								// Phase 4: the generated document sent as an attachment with an
+								// Phase 4: the contract sent as an attachment with an
 								// empty body, by a person, and a second message an agent would
 								// have to wait on.
 								const draft = await b.mail.outbox.createDraft({
 									accountId: mailAccount.id, to: [{ name: "Laura", address: "laura@obet.be" }], subject: "Ontwikkelovereenkomst",
-									bodyText: "", clientId: made[0].id, documentIds: [gen.document.id],
+									bodyText: "", clientId: made[0].id, documentIds: [offer.id],
 								});
 								await b.mail.outbox.send(draft.id);
 								await b.mail.outbox.createDraft({
@@ -880,10 +793,28 @@ if (!app.requestSingleInstanceLock()) {
 									"Levering van de eiken tafel op vrijdag in de voormiddag.\nDe planken krijgen een week om te wennen in de werkplaats.\nBel De Smet een dag vooraf.\n",
 								),
 							);
-							await imports.importFile({
-								source: { kind: "bytes", fileName: "Bonnetje bouwmarkt.txt", data: new TextEncoder().encode("Schroeven en lijm, 18,40 euro.\n"), via: "drop" },
+							// The owner's own files, kept under no client and no project: Files.
+							const own = (fileName: string, data: Uint8Array) =>
+								imports.importFile({ source: { kind: "bytes", fileName, data, via: "drop" } });
+							await own("Bonnetje bouwmarkt.txt", new TextEncoder().encode("Schroeven en lijm, 18,40 euro.\n"));
+							await own("Logo Juno.png", new Uint8Array(png));
+							await own(
+								"Algemene voorwaarden 2026.docx",
+								await fixtures.docxBytes([
+									"Algemene voorwaarden van Juno.",
+									"Een offerte is dertig dagen geldig.",
+									"Facturen worden binnen dertig dagen betaald.",
+								]),
+							);
+							await own("Prijslijst hout 2026.xlsx", await fixtures.xlsxBytes({ Hout: [["Soort", "Prijs per m2"], ["Eik", 92], ["Essen", 74]] }));
+							await (await import("./main/services/pages")).create({
+								title: "Werkplaats checklist",
+								blocks: [
+									{ id: "smoke-check-1", type: "check", text: "Beitels slijpen", done: true },
+									{ id: "smoke-check-2", type: "check", text: "Schroeven en lijm bestellen", done: false },
+								],
 							});
-							console.log("SMOKE_DEMO documents files=4 unfiled=1");
+							console.log("SMOKE_DEMO documents files=4 own=5");
 						}
 
 							// Two files on the project, added through the service rather than
@@ -1066,39 +997,25 @@ if (!app.requestSingleInstanceLock()) {
 							// contract is several.
 							{
 								const { statSync, readFileSync: readPdfBytes } = await import("node:fs");
-								const generatedRows = await (await import("./main/services/documents")).list({});
-								// Both generated documents are laid out on paper now: the example,
-								// which is two pages, and the small one the walk made itself, which
-								// is one.
-								const generated = generatedRows.find((row) => row.sourceKind === "generated" && row.pdfPath !== null);
-								if (!generated?.pdfPath) throw new Error("Smoke: no generated document has a PDF");
-								const size = statSync(generated.pdfPath).size;
+								const keptRows = await (await import("./main/services/documents")).list({});
+								const printed = keptRows.find((row) => row.title === "Ontwikkelovereenkomst" && row.pdfPath !== null);
+								if (!printed?.pdfPath) throw new Error("Smoke: the printed contract has no PDF");
+								const size = statSync(printed.pdfPath).size;
 								if (size < 2000) {
-									throw new Error(`Smoke: the generated PDF is ${size} bytes, which is a blank page`);
+									throw new Error(`Smoke: the printed PDF is ${size} bytes, which is a blank page`);
 								}
-								const head = readPdfBytes(generated.pdfPath).subarray(0, 5).toString("latin1");
+								const head = readPdfBytes(printed.pdfPath).subarray(0, 5).toString("latin1");
 								if (head !== "%PDF-") {
-									throw new Error(`Smoke: the generated file starts with ${head}, not a PDF header`);
+									throw new Error(`Smoke: the printed file starts with ${head}, not a PDF header`);
 								}
-								// A template on paper prints one sheet per page, at the paper's
-								// size, whatever A4 the printer was told to default to. The example
-								// is two pages, and one that ran onto a third sheet is a layout
-								// fault the bytes above would never show.
+								// Printed at A4, whatever the printer was told to default to, on one sheet.
 								const { PDFDocument } = await import("pdf-lib");
-								const onPaper = generatedRows.filter((row) => row.pdfPath !== null && row.bodyHtml.includes("juno-sheets"));
-								const sheetCounts: number[] = [];
-								for (const row of onPaper) {
-									const paperPdf = await PDFDocument.load(readPdfBytes(row.pdfPath!));
-									const { width: sheetWidth, height: sheetHeight } = paperPdf.getPage(0).getSize();
-									if (Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842) {
-										throw new Error(`Smoke: a document on paper printed sheets of ${sheetWidth} x ${sheetHeight}, not A4`);
-									}
-									sheetCounts.push(paperPdf.getPageCount());
+								const printedPdf = await PDFDocument.load(readPdfBytes(printed.pdfPath));
+								const { width: sheetWidth, height: sheetHeight } = printedPdf.getPage(0).getSize();
+								if (Math.round(sheetWidth) !== 595 || Math.round(sheetHeight) !== 842 || printedPdf.getPageCount() !== 1) {
+									throw new Error(`Smoke: the contract printed ${printedPdf.getPageCount()} sheets of ${sheetWidth} x ${sheetHeight}, not one A4`);
 								}
-								if (sheetCounts.sort().join() !== "1,1,2") {
-									throw new Error(`Smoke: the example, the small document and the one with a component should print on 2, 1 and 1 sheets, got ${sheetCounts.join(", ")}`);
-								}
-								console.log(`SMOKE_DEMO generated pdf=${size} sheets=${sheetCounts.join("+")}`);
+								console.log(`SMOKE_DEMO printed pdf=${size} sheets=1`);
 							}
 							window.webContents.reload();
 							await new Promise((r) => {
@@ -1199,6 +1116,9 @@ if (!app.requestSingleInstanceLock()) {
 								target.focus();
 							};
 							front(window);
+							// A machine nobody is sitting at also turns its display off, and an
+							// unlit display composites nothing either, so a front run keeps it on.
+							if (process.env.JUNO_SMOKE_FRONT) powerSaveBlocker.start("prevent-display-sleep");
 
 							// A throwaway user-data directory is a genuinely first install, so
 							// the setup window opens in front of the application (decision 34).
@@ -1398,12 +1318,11 @@ if (!app.requestSingleInstanceLock()) {
 										"Notes",
 										"Client documents",
 										"Project documents",
-										"Files without a client",
+										"Files",
 										"Page",
 										"Agent",
 										"Agent log",
 										"Mail templates",
-										"Document templates",
 									]
 								: ["Clients"];
 							for (const screen of screens) {
@@ -1412,17 +1331,14 @@ if (!app.requestSingleInstanceLock()) {
 									`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
 								);
 								// Drafts is a view inside Mail; Week and the event form live inside
-								// Calendar. Reminders and the files without a client are reached from
-								// the overview, Styled mail from Mail, and a client's documents, a page
-								// and the document templates from a client's Documents tab (decision 81).
-								// None of them is a sidebar entry.
+								// Calendar. Reminders are reached from the overview, Styled mail from
+								// Mail, and a client's documents and a page from a client's Documents
+								// tab (decision 81). None of them is a sidebar entry; Files is.
 								const sidebarEntry =
-									screen === "Client record" || screen === "Client documents" || screen === "Page" || screen === "Document templates"
+									screen === "Client record" || screen === "Client documents" || screen === "Page"
 										? "Clients"
 										: screen === "Project documents"
 											? "Projects"
-										: screen === "Files without a client"
-											? "Overview"
 										: screen === "Project record" || screen === "Projects as a list"
 											? "Projects"
 											: screen === "Drafts" || screen === "Mail templates"
@@ -1499,7 +1415,7 @@ if (!app.requestSingleInstanceLock()) {
 											return listed ? "ok" : "the Documents tab lists nothing";
 										})()`,
 									) as Promise<string>;
-								if (screen === "Client documents" || screen === "Page" || screen === "Document templates") {
+								if (screen === "Client documents" || screen === "Page") {
 									const opened = await openRecordDocuments("client");
 									if (opened !== "ok") throw new Error(`Smoke: on the way to ${screen}, ${opened}`);
 								}
@@ -1507,40 +1423,34 @@ if (!app.requestSingleInstanceLock()) {
 									const opened = await openRecordDocuments("project");
 									if (opened !== "ok") throw new Error(`Smoke: on the way to ${screen}, ${opened}`);
 								}
-								// Templates is a screen without a rail entry, opened from a Documents tab.
-								if (screen === "Document templates") {
-									const opened = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const button = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Templates");
-											if (!button) return false;
-											button.click();
-											// A template row, not one of the client's documents still on screen while Templates mounts.
-											for (let tries = 0; tries < 40 && !document.querySelector("main [data-explorer-item^='tpl:']"); tries++) await new Promise((r) => setTimeout(r, 150));
-											return Boolean(document.querySelector("main [data-explorer-item^='tpl:']"));
-										})()`,
-									)) as boolean;
-									if (!opened) throw new Error("Smoke: no Templates button on the client's Documents tab, or the Templates screen lists nothing");
-								}
-								if (screen === "Files without a client") {
+								if (screen === "Files") {
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
 											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											let card = null;
-											for (let tries = 0; tries < 40 && !card; tries++) {
-												card = document.querySelector("main section[aria-label='Files without a client']");
-												if (!card) await wait(150);
+											const rows = () => [...document.querySelectorAll("main [data-explorer-item]")];
+											for (let tries = 0; tries < 40 && !rows().some((el) => el.textContent.includes("Bonnetje bouwmarkt")); tries++) await wait(150);
+											if (!rows().some((el) => el.textContent.includes("Bonnetje bouwmarkt"))) return "Files does not list the file kept under nothing";
+											if (rows().some((el) => el.textContent.includes("Ontwikkelovereenkomst"))) return "Files lists a client's document";
+											const section = document.querySelector("main section[aria-label='Files']");
+											if (!section) return "no Files section";
+											const heading = section.querySelector("h3");
+											if (!heading || heading.textContent.trim() !== "Files") return "the heading is not Files";
+											for (const label of ["New", "Add files"]) {
+												if (![...section.querySelectorAll("button")].some((el) => el.textContent.trim() === label)) return "no " + label + " in the bar";
 											}
-											if (!card) return "the Overview has no card for the files without a client";
-											if (!card.textContent.includes("Bonnetje bouwmarkt")) return "the card does not list the file kept under nothing";
-											if (![...card.querySelectorAll("button")].some((el) => el.textContent.trim() === "Pick a place")) return "the card offers no way to give the file a place";
-											const all = [...card.querySelectorAll("button")].find((el) => el.textContent.trim() === "See all");
-											if (!all) return "the card has no See all";
-											all.click();
-											for (let tries = 0; tries < 40 && ![...document.querySelectorAll("main [data-explorer-item]")].some((el) => el.textContent.includes("Bonnetje bouwmarkt")); tries++) await wait(150);
-											return [...document.querySelectorAll("main [data-explorer-item]")].some((el) => el.textContent.includes("Bonnetje bouwmarkt")) ? "ok" : "See all does not list the file";
+											if (!document.querySelector("header input[aria-label='Search files']")) return "no search in the title bar";
+											// The selection is an explorer's: Ctrl A, then the bar counts it.
+											rows()[0].focus();
+											rows()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }));
+											await wait(300);
+											const count = section.querySelector("[aria-live=polite]")?.textContent.trim() ?? "";
+											if (!/^\\d+ of \\d+ selected$/.test(count)) return "Ctrl A did not select every file: " + count;
+											rows()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await wait(200);
+											return "ok";
 										})()`,
 									)) as string;
-									if (opened !== "ok") throw new Error(`Smoke: files without a client: ${opened}`);
+									if (opened !== "ok") throw new Error(`Smoke: Files: ${opened}`);
 								}
 								if (route && !(await pressText(route)))
 									throw new Error(`Smoke: no "${route}" to press on the way to ${screen}`);
@@ -2223,7 +2133,7 @@ if (!app.requestSingleInstanceLock()) {
 									};
 
 									// The tab as a list, with the bar the frames draw: the heading and a
-									// count, then the view switch, Templates, New and Add files. A client's
+									// count, then the view switch, New and Add files. A client's
 									// list names the project of each document in a column of its own.
 									await step(
 										"list",
@@ -2233,7 +2143,7 @@ if (!app.requestSingleInstanceLock()) {
 										if (!list) return "no view switch on the tab";
 										if (list.getAttribute("aria-pressed") !== "true") list.click();
 										await wait(300);
-										for (const label of ["Templates", "Add files"]) {
+										for (const label of ["Add files"]) {
 											if (![...section.querySelectorAll("button")].some((el) => el.textContent.trim() === label)) return "no " + label + " on the tab";
 										}
 										if (!section.querySelector("button[aria-label='New document']")) return "no New on the tab";
@@ -2417,85 +2327,17 @@ if (!app.requestSingleInstanceLock()) {
 										);
 									}
 								}
-								if (screen === "Document templates") {
-									// The example first. It is the one template every first install has,
-									// laid out on the canvas on two pages, so its preview and its editor
-									// are the first things a new owner opens.
-									const inspected = await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Voorbeeld"));
-											if (!row) return "no row for the example";
-											row.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
-											return document.querySelector("main canvas") ? "ok" : "the example has no preview";
-										})()`,
-									) as string;
-									if (inspected !== "ok") throw new Error(`Smoke: the example document template ${inspected}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-example-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Into the editor, where both pages have to be on the canvas.
-									const laidOut = await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas";
-											if (!content.textContent.includes("Voorbeeldovereenkomst")) return "the first page does not show its title";
-											if (!content.textContent.includes("Voor akkoord")) return "the second page does not show its signature block";
-											if (!document.body.textContent.includes("A4 portrait")) return "the sheet does not say its paper";
-											return "ok";
-										})()`,
-									) as string;
-									if (laidOut !== "ok") throw new Error(`Smoke: the example document template editor ${laidOut}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-example-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Back out without a change, to the preview and then to the list, so the
-									// steps after this start where they always did.
-									const returned = await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											// The canvas editor has no back button of its own: Escape leaves it.
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(400);
-											const dialog = document.querySelector("[role=dialog]");
-											if (dialog) {
-												const discard = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
-												if (!discard) return "the editor asked to discard a change nobody made";
-												discard.click();
-												await wait(500);
-											}
-											if (!back()) return "no back action from the preview";
-											back().click();
-											await wait(500);
-											return document.querySelector("main [data-explorer-item]") ? "ok" : "did not return to the list";
-										})()`,
-									) as string;
-									if (returned !== "ok") throw new Error(`Smoke: leaving the example document template ${returned}`);
-								}
-								if (screen === "Mail templates" || screen === "Document templates") {
+								if (screen === "Mail templates") {
 									// Opens a template so the preview path runs for real: the
 									// list renders, the row opens a preview, and the preview asks the
 									// service to fill the template. A typecheck proves none of that,
-									// and the preview is where a template screen would throw. For the
-									// mail templates it is the hand-written one the walk made, which
-									// the steps after this need.
+									// and the preview is where a template screen would throw. It is
+									// the hand-written one the walk made, which the steps after this
+									// need.
 									const opened = (await window.webContents.executeJavaScript(
 										`(async () => {
-											const wanted = ${JSON.stringify(screen === "Mail templates" ? "Herinnering betaling" : "Handgeschreven overeenkomst")};
-											const row = [...document.querySelectorAll(${JSON.stringify(screen === "Mail templates" ? "main ul li button" : "main [data-explorer-item]")})].find((el) => el.textContent.includes(wanted));
+											const wanted = "Herinnering betaling";
+											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes(wanted));
 											if (!row) return "no template row";
 											row.click();
 											await new Promise((r) => setTimeout(r, 900));
@@ -2509,481 +2351,17 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									)) as string;
 									if (opened !== "ok") throw new Error(`Smoke: ${screen} ${opened}`);
-									if (screen === "Mail templates") {
-										// A mail template is read on a page of its own, and the frame is
-										// as tall as the message rather than a fixed box.
-										await new Promise((r) => setTimeout(r, 600));
-										for (const theme of ["light", "dark"] as const) {
-											nativeTheme.themeSource = theme;
-											await window.webContents.executeJavaScript(
-												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
-											);
-											await new Promise((r) => setTimeout(r, 400));
-											writeFileSync(joinPath(shotDir, `mail-template-page-${theme}.png`), (await capture(window.webContents)).toPNG());
-										}
-									}
-								}
-								if (screen === "Document templates") {
-									// The seeded templates carry no page layout, so the editor opens
-									// in its plain-HTML mode first. Starting a layout, dropping a block
-									// on the canvas and reading it back is the only thing in this app
-									// that proves the page compiler's editor half, rather than only the
-									// renderer that turns a finished layout into a PDF.
-									const edited = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											await wait(600);
-											const start = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Start a page layout");
-											if (!start) return "no start-a-page-layout action";
-											start.click();
-											await wait(400);
-											const dialog = document.querySelector("[role=dialog]");
-											if (!dialog) return "no confirmation dialog";
-											const confirm = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Start a page layout");
-											if (!confirm) return "the confirmation has no way to continue";
-											confirm.click();
-											await wait(700);
-											if (!document.querySelector("button[aria-label^='Page 1']")) return "no page canvas";
-											const addParagraph = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Add paragraph");
-											if (!addParagraph) return "no insert control";
-											addParagraph.click();
-											await wait(300);
-											if (!document.querySelector("button[aria-label='Paragraph block']")) return "the block did not appear on the canvas";
-											return "ok";
-										})()`,
-									)) as string;
-									if (edited !== "ok") throw new Error(`Smoke: document template editor ${edited}`);
-
+									// A mail template is read on a page of its own, and the frame is
+									// as tall as the message rather than a fixed box.
+									await new Promise((r) => setTimeout(r, 600));
 									for (const theme of ["light", "dark"] as const) {
 										nativeTheme.themeSource = theme;
 										await window.webContents.executeJavaScript(
 											`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
 										);
 										await new Promise((r) => setTimeout(r, 400));
-										const image = await capture(window.webContents);
-										writeFileSync(
-											joinPath(shotDir, `document-template-editor-${theme}.png`),
-											image.toPNG(),
-										);
+										writeFileSync(joinPath(shotDir, `mail-template-page-${theme}.png`), (await capture(window.webContents)).toPNG());
 									}
-
-									// Leaves the block unsaved: the back arrow raises its own discard
-									// dialog because the draft now differs from what "Start a page
-									// layout" already wrote, and this is that path exercised for real.
-									const leftEditor = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											if (!back) return "no back action";
-											back.click();
-											await wait(400);
-											const dialog = document.querySelector("[role=dialog]");
-											if (dialog) {
-												const discard = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
-												if (!discard) return "no discard action";
-												discard.click();
-												await wait(500);
-											}
-											return document.querySelector("main button") ? "ok" : "did not return to the preview";
-										})()`,
-									)) as string;
-									if (leftEditor !== "ok")
-										throw new Error(`Smoke: leaving the document template editor ${leftEditor}`);
-
-									// Walks Fill (skipped, the seeded templates ask for nothing extra),
-									// Link and Review, stopping short of the generate button.
-									const usedDocument = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
-											if (!use) return "no use action";
-											use.click();
-											await wait(600);
-											const clientLabel = [...document.querySelectorAll("label")].find((el) => el.textContent.trim().startsWith("Client"));
-											if (!clientLabel) return "no client field";
-											const select = document.getElementById(clientLabel.htmlFor);
-											if (!select) return "no client select";
-											const options = [...select.options].map((o) => o.value).filter(Boolean);
-											if (options.length === 0) return "no client to link";
-											const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
-											setter.call(select, options[0]);
-											select.dispatchEvent(new Event("change", { bubbles: true }));
-											await wait(200);
-											const next = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Next");
-											if (!next) return "no next action";
-											next.click();
-											await wait(900);
-											if (!document.querySelector('main iframe[title="Document preview"]')) return "no rendered review";
-											return "ok";
-										})()`,
-									)) as string;
-									if (usedDocument !== "ok")
-										throw new Error(`Smoke: using a document template ${usedDocument}`);
-
-									const useDocumentImage = await capture(window.webContents);
-									writeFileSync(
-										joinPath(shotDir, `use-document-template.png`),
-										useDocumentImage.toPNG(),
-									);
-
-									// One click undoes Review, landing back on Link; the same control,
-									// now reading "Cancel", is what actually leaves the sequence.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const leave = () => {
-												const b = [...document.querySelectorAll("button")].find((el) => ["Previous", "Cancel"].includes(el.textContent.trim()));
-												if (b) b.click();
-												return Boolean(b);
-											};
-											leave();
-											await wait(400);
-											leave();
-											await wait(400);
-										})()`,
-									);
-								}
-								if (screen === "Document templates") {
-									// The plus beside the heading: asks for a name, creates a
-									// template with one empty page as its body, and opens it straight
-									// into the page editor built on that page rather than the plain-HTML
-									// mode a template with no layout opens into.
-									const created = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											if (!back) return "no back action from the preview";
-											back.click();
-											await wait(500);
-											const plus = document.querySelector('button[aria-label="New document template"]');
-											if (!plus) return "no plus on the list";
-											plus.click();
-											await wait(400);
-											const field = document.querySelector('input[aria-label="New document template"]');
-											if (!field) return "the plus did not open into a name field";
-											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											setValue.call(field, "Smoke document template");
-											field.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(200);
-											field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-											let canvas = null;
-											for (let tries = 0; tries < 20 && !canvas; tries++) {
-												await wait(150);
-												canvas = document.querySelector("[data-canvas-content]");
-											}
-											if (!canvas) {
-												const alert = document.querySelector("[role=alert]");
-												return "the new template did not open on paper" + (alert ? ": " + alert.textContent.trim() : "");
-											}
-											return "ok";
-										})()`,
-									)) as string;
-									if (created !== "ok")
-										throw new Error(`Smoke: creating a document template ${created}`);
-
-									// Leaves without editing further, back to that template's own
-									// preview, which is where the screenshots below expect to be.
-									// The canvas editor has no back button over the canvas: Escape
-									// with nothing selected is the way out, as it is in the mail one.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await new Promise((r) => setTimeout(r, 500));
-										})()`,
-									);
-
-									// One more Back reaches the list, where the search bar and the
-									// selection live. Typed text narrows the rows, select-all ticks
-									// every one left, and both are cleared again so the screenshot
-									// below still shows the list at rest.
-									const searched = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											if (back) back.click();
-											await wait(500);
-											const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-											const search = document.querySelector('input[aria-label="Search templates"]');
-											if (!search) return "no search field";
-											setValue.call(search, "zzz-nothing-matches-zzz");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const main = document.querySelector("main");
-											if (!main.textContent.includes("Nothing matches")) return "the search did not filter the list";
-											setValue.call(search, "");
-											search.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(250);
-											const first = [...main.querySelectorAll("[data-explorer-item]")][0];
-											if (!first) return "the list came back empty";
-											first.focus();
-											first.dispatchEvent(new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }));
-											await wait(200);
-											if (!main.textContent.includes("selected")) return "Ctrl A did not select the rows";
-											first.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(200);
-											return "ok";
-										})()`,
-									)) as string;
-									if (searched !== "ok")
-										throw new Error(`Smoke: document templates list ${searched}`);
-
-									// The template laid out on paper: its preview is the PDF it
-									// prints as, its editor is the canvas with a page of A4 on it,
-									// and using it makes the PDF first and then asks about a client.
-									const paperPreview = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Offerte op papier"));
-											if (!row) return "no row for the template on paper";
-											row.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
-											return document.querySelector("main canvas") ? "ok" : "the preview drew no PDF";
-										})()`,
-									)) as string;
-									if (paperPreview !== "ok") throw new Error(`Smoke: document template on paper ${paperPreview}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-paper-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const paperEditor = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas";
-											if (!content.textContent.includes("Omvang")) return "the page does not show its text";
-											if (!document.body.textContent.includes("A4 portrait")) return "the sheet does not say its paper";
-											return "ok";
-										})()`,
-									)) as string;
-									if (paperEditor !== "ok") throw new Error(`Smoke: document canvas editor ${paperEditor}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-paper-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const paperUse = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const use = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Use");
-											if (!use) return "no use action on the preview";
-											use.click();
-											await wait(500);
-											const field = document.querySelector("main textarea");
-											if (!field) return "no field to fill";
-											const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
-											setValue.call(field, "Een website");
-											field.dispatchEvent(new Event("input", { bubbles: true }));
-											await wait(200);
-											const make = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Make the PDF");
-											if (!make) return "no make-the-PDF action";
-											make.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("[role=dialog]"); tries++) await wait(150);
-											const dialog = document.querySelector("[role=dialog]");
-											if (!dialog) return "no question about a client once the PDF was made";
-											return "ok";
-										})()`,
-									)) as string;
-									if (paperUse !== "ok") throw new Error(`Smoke: using a document template on paper ${paperUse}`);
-									writeFileSync(joinPath(shotDir, `use-document-template-paper.png`), (await capture(window.webContents)).toPNG());
-									const paperLeft = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const dialog = document.querySelector("[role=dialog]");
-											const keep = [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Keep in Juno");
-											if (!keep) return "the question has no way to keep the document";
-											keep.click();
-											await wait(400);
-											const labels = [...document.querySelectorAll("label")].map((el) => el.textContent.trim());
-											if (!labels.some((text) => text.startsWith("Client")) || !labels.some((text) => text.startsWith("Project"))) return "the keep step does not offer a client and a project";
-											const leave = () => {
-												const b = [...document.querySelectorAll("button")].find((el) => ["Previous", "Cancel"].includes(el.textContent.trim()));
-												if (b) b.click();
-												return Boolean(b);
-											};
-											for (let step = 0; step < 3; step++) {
-												leave();
-												await wait(400);
-											}
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											if (back) back.click();
-											await wait(500);
-											return document.querySelector("main [data-explorer-item]") ? "ok" : "did not return to the list";
-										})()`,
-									)) as string;
-									if (paperLeft !== "ok") throw new Error(`Smoke: leaving the document template on paper ${paperLeft}`);
-
-									// Seventy paragraphs on one A4 page run past its foot: the editor
-									// says so, flows them onto the pages after it when asked, and draws
-									// the picture the template keeps from Juno's own origin.
-									const flowed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Lange tekst op papier"));
-											if (!row) return "no row for the long template";
-											row.click();
-											await wait(700);
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const picture = document.querySelector("[data-canvas-content] img");
-											if (!picture) return "the kept picture is not on the canvas";
-											for (let tries = 0; tries < 20 && !picture.complete; tries++) await wait(100);
-											if (!picture.src.startsWith("app://asset/template/") || picture.naturalWidth !== 1) return "the kept picture did not load: " + picture.src;
-											let flow = null;
-											// The warning is drawn from a measurement taken on an animation frame, and a
-											// window that is covered is not given frames, so this waits for the window as
-											// well as for the editor.
-											for (let tries = 0; tries < 100 && !flow; tries++) {
-												await wait(150);
-												flow = [...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Flow onto the next pages");
-											}
-											if (!flow) return "no warning that the page runs past the paper";
-											flow.click();
-											for (let tries = 0; tries < 60 && document.querySelector("[role=status]"); tries++) await wait(150);
-											if (document.querySelector("[role=status]")) return "a page still runs past the paper after the flow";
-											const pages = document.body.textContent.match(/(\\d+) pages/);
-											if (!pages || Number(pages[1]) < 2) return "the text was not flowed onto more pages";
-											return "ok";
-										})()`,
-									)) as string;
-									if (flowed !== "ok") throw new Error(`Smoke: flowing a document onto pages ${flowed}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-paper-flowed-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Leaves the flow unsaved: Escape lets go of nothing and goes back.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const back = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											if (back) back.click();
-											await wait(500);
-										})()`,
-									);
-								}
-								if (screen === "Document templates") {
-									// Components: placed in a template, listed on their own, and edited in
-									// the same canvas as a template. The list is reached from the button
-									// beside Import Word file.
-									const placed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const find = () => [...document.querySelectorAll("main [data-explorer-item]")].find((el) => el.textContent.includes("Offerte met briefhoofd"));
-											for (let tries = 0; tries < 3 && !find(); tries++) {
-												window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-												await wait(500);
-												[...(document.querySelector("[role=dialog]")?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
-												await wait(300);
-												[...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"))?.click();
-												await wait(500);
-											}
-											const row = find();
-											if (!row) return "no row for the template with a component";
-											row.click();
-											for (let tries = 0; tries < 40 && !document.querySelector("main canvas"); tries++) await wait(150);
-											if (!document.querySelector("main canvas")) return "the preview drew no PDF";
-											const edit = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Edit");
-											if (!edit) return "no edit action";
-											edit.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas";
-											if (!content.textContent.includes("Onze referentie")) return "the placed component's text is not drawn on the page";
-											const logo = content.querySelector("img");
-											if (!logo) return "the component's picture is not drawn";
-											for (let tries = 0; tries < 20 && !logo.complete; tries++) await wait(100);
-											if (!logo.src.startsWith("app://asset/component/") || logo.naturalWidth !== 1) return "the component's picture did not load: " + logo.src;
-											return "ok";
-										})()`,
-									)) as string;
-									if (placed !== "ok") throw new Error(`Smoke: a template with a component ${placed}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-template-component-placed-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const listed = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const dialog = document.querySelector("[role=dialog]");
-											const discard = dialog && [...dialog.querySelectorAll("button")].find((el) => el.textContent.trim() === "Discard and leave");
-											discard?.click();
-											await wait(500);
-											back()?.click();
-											await wait(500);
-											// Components is in the title bar's more menu, where the design leaves room for it.
-											const open = [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Components");
-											if (!open) return "no components action on the templates list";
-											open.click();
-											await wait(700);
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
-											if (!row) return "the components list has no row for the letterhead";
-											if (!row.textContent.includes("Placed in 1 template")) return "the row does not say where it is placed: " + row.textContent;
-											return "ok";
-										})()`,
-									)) as string;
-									if (listed !== "ok") throw new Error(`Smoke: the components list ${listed}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-components-list-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									const editedComponent = (await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const row = [...document.querySelectorAll("main ul li button")].find((el) => el.textContent.includes("Briefhoofd"));
-											row.click();
-											for (let tries = 0; tries < 20 && !document.querySelector("[data-canvas-content]"); tries++) await wait(150);
-											const content = document.querySelector("[data-canvas-content]");
-											if (!content) return "no canvas for the component";
-											if (!content.textContent.includes("referentie")) return "the component does not show its text";
-											return "ok";
-										})()`,
-									)) as string;
-									if (editedComponent !== "ok") throw new Error(`Smoke: the component editor ${editedComponent}`);
-									for (const theme of ["light", "dark"] as const) {
-										nativeTheme.themeSource = theme;
-										await window.webContents.executeJavaScript(`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
-										await new Promise((r) => setTimeout(r, 400));
-										writeFileSync(joinPath(shotDir, `document-component-editor-${theme}.png`), (await capture(window.webContents)).toPNG());
-									}
-									// Out to the list of templates again, so the steps after this start where they always did.
-									await window.webContents.executeJavaScript(
-										`(async () => {
-											const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-											const back = () => [...document.querySelectorAll("main button")].find((el) => el.textContent.trim() === "Back" || (el.getAttribute("aria-label") ?? "").startsWith("Back to"));
-											window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-											await wait(500);
-											const dialog = document.querySelector("[role=dialog]");
-											[...(dialog?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === "Discard and leave")?.click();
-											await wait(500);
-											// The way back to the templates is in the title bar, not in the page.
-											[...document.querySelectorAll("header button, main button")].find((el) => el.textContent.trim() === "Templates")?.click();
-											await wait(700);
-										})()`,
-									);
 								}
 								if (screen === "Mail templates") {
 									// One document underneath every view (docs/editors.md section 2):
@@ -6039,7 +5417,7 @@ if (!app.requestSingleInstanceLock()) {
 								console.log(`SMOKE_DEMO settings pages=${pages.length}`);
 								closeSettingsWindow();
 
-								// The sidebar is a rail of icons and never opens. Seven entries (six
+								// The sidebar is a rail of icons and never opens. Eight entries (seven
 								// places and settings; the agent is in the title bar), no text of its
 								// own, and a label in a tooltip that appears when the pointer rests on one.
 								await new Promise((r) => setTimeout(r, 400));
@@ -6048,7 +5426,7 @@ if (!app.requestSingleInstanceLock()) {
 										const nav = document.querySelector("nav[data-sidebar]");
 										if (!nav) return "no sidebar";
 										const entries = nav.querySelectorAll("button[data-nav]").length;
-										if (entries !== 7) return "the sidebar has " + entries + " entries, not 7";
+										if (entries !== 8) return "the sidebar has " + entries + " entries, not 8";
 										if (!document.querySelector("header button[data-nav=agent]")) return "the agent is not in the title bar";
 										if (nav.textContent.trim() !== "") return "the sidebar draws text: " + nav.textContent.trim();
 										const width = Math.round(nav.getBoundingClientRect().width);

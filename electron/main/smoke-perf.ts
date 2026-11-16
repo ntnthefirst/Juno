@@ -3,7 +3,7 @@
  *
  * Seeds a business of a realistic size through the bridge, the way a person's
  * records arrive, then times what a person waits for: the first paint, each of
- * the six places, opening a record, a long list, and a theme change in the
+ * the seven places, opening a record, a long list, and a theme change in the
  * main window and in settings over it, and how long a preview of a large
  * workbook and Word file holds the main process, parsed there as it used to
  * be and through the file worker. Each figure is printed on a
@@ -261,6 +261,10 @@ async function seed(window: BrowserWindow): Promise<Record<string, number>> {
 		for (let i = 0; i < 12; i++) {
 			await b.documents.importFile({ source: { kind: "bytes", fileName: "Perf brief " + String(i).padStart(2, "0") + ".txt", data: text(1000 + i) }, clientId: clients[5].id });
 		}
+		// And the owner's own, under no client and no project: Files.
+		for (let i = 0; i < 40; i++) {
+			await b.documents.importFile({ source: { kind: "bytes", fileName: "Perf own " + String(i).padStart(2, "0") + ".txt", data: text(2000 + i) } });
+		}
 		const records = Math.round(performance.now() - t0);
 		const t1 = performance.now();
 		await b.mail.accounts.create({ email: "hallo@juno.test", label: "Juno", imapHost: "imap.juno.test", smtpHost: "smtp.juno.test", password: "smoke" });
@@ -314,7 +318,7 @@ async function screens(window: BrowserWindow): Promise<void> {
 			const out = [];
 			// The words that say the screen's own records have arrived, which a
 			// screen with no skeleton cannot otherwise be told apart from loaded.
-			const expect = { overview: "", calendar: "Perf event", clients: "Perf client", projects: "Perf project", mail: "Perf thread", notes: "Perf note" };
+			const expect = { overview: "", calendar: "Perf event", clients: "Perf client", projects: "Perf project", mail: "Perf thread", notes: "Perf note", files: "Perf own" };
 			for (const id of Object.keys(expect)) {
 				await wait(300);
 				takeLong();

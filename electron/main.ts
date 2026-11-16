@@ -2265,7 +2265,43 @@ if (!app.requestSingleInstanceLock()) {
 										await preview("sheet", "Prijzen hout 2026", "table");
 										await preview("image", "Werktekening tafel", "img");
 										await preview("word", "Bestek keuken", "iframe", true);
+
+										// The zoom (decision 83): the button, then the keys, then back to fit.
+										await step(
+											"zoom of the Word preview",
+											`const label = () => document.querySelector("[data-full-preview] [data-zoom-label]")?.textContent ?? "";
+											const start = label();
+											if (!start) return "the Word preview has no zoom controls";
+											document.querySelector("[data-full-preview] button[aria-label='Zoom in']").click();
+											await wait(300);
+											const zoomed = label();
+											if (zoomed === start) return "Zoom in left the label at " + start;
+											window.dispatchEvent(new KeyboardEvent("keydown", { key: "=", code: "Equal", ctrlKey: true, bubbles: true }));
+											await wait(300);
+											if (label() === zoomed) return "Ctrl and plus left the label at " + zoomed;
+											const frame = document.querySelector("[data-full-preview] iframe");
+											if (!frame || getComputedStyle(frame).zoom === "1") return "the page was not zoomed";
+											return "ok";`,
+										);
+										await shoot(`${prefix}preview-word-zoomed`);
+										await step(
+											"zoom back to fit",
+											`window.dispatchEvent(new KeyboardEvent("keydown", { key: "0", code: "Digit0", ctrlKey: true, bubbles: true }));
+											await wait(300);
+											const label = document.querySelector("[data-full-preview] [data-zoom-label]")?.textContent;
+											return label === "100%" ? "ok" : "Ctrl and 0 left the label at " + label;`,
+										);
+										process.stdout.write("SMOKE_DEMO preview zoom=ok\n");
 										await preview("pdf", "PDF", "canvas");
+										// A PDF's text lies over its page, so it can be selected, and the page is counted.
+										await step(
+											"text of the PDF preview",
+											`const text = await until(() => document.querySelector("[data-full-preview] .textLayer span"), 60);
+											if (!text) return "the PDF has no text laid over its page";
+											const indicator = document.querySelector("[data-full-preview] [data-page-indicator]")?.textContent ?? "";
+											return /^Page 1 of [0-9]+$/.test(indicator.trim()) ? "ok" : "the page indicator reads " + indicator;`,
+										);
+										process.stdout.write("SMOKE_DEMO preview pdf text=ok\n");
 
 										// Next and Previous go through the list, and Escape closes the preview.
 										await step(

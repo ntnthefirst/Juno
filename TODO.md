@@ -71,9 +71,17 @@ Everything decided and buildable here is built. What is left needs your hands.
   the server, send one more message, and check the failure is listed once with
   its reason and not tried again at the next sync. Note which provider you used,
   and whether it answered the move with the new UID or only at the next sync.
-- **No real Word file has been previewed yet.** The reader is tested against
-  Mammoth's own output and a hand-built `.docx`. Add one of your contracts to a
-  Documents tab and write down what its preview gets wrong.
+- **No real contract or deck of yours has been previewed through Office yet**
+  (decision 83). A hand-made `.docx` and `.pptx` went through Word in about
+  seven seconds and PowerPoint in about five on this machine. Open one of your
+  contracts and one of your decks from a Documents tab, note how long the first
+  look takes and what differs from Word or PowerPoint, then open them again and
+  check the second look is instant. Try one with a password too: it should
+  fall back to the HTML or the picture within a few seconds, with no window.
+- **Only one real Pages file has been read, and no Keynote or Numbers file.**
+  The one Pages file in your documents reads well: its running text in order,
+  then the answers typed into its tables. Add a Keynote deck and a Numbers workbook of
+  yours and write down what their words miss or put in the wrong order.
 - **The release itself.** `npm run smoke:packaged` and an installer on a clean
   machine, then the first published release, are yours to run.
 
@@ -150,6 +158,18 @@ Nothing here needs a decision, only time.
   passes the minute stops the script, but Word was started by COM, not by the
   script, so a Word stuck on a dialog keeps running hidden until it is ended
   in Task Manager. Recording its process id at start would let Juno end it.
+- **An iWork file's words come in the order the file keeps them** (decision
+  83). Pages keeps its running text in order; a deck's slide order, where a
+  Pages table sits in the text, and a workbook's cells as a grid live in
+  messages that differ by app and version. Reading those would put the
+  answers of a Pages form under their questions, the slides in order, and a
+  Numbers sheet in the table preview. Keynote's slide thumbnails (`Data/st-*`)
+  could then be shown in order too. Each needs real files of each app to
+  check against.
+- **Find does not reach into Word shown as HTML.** That page runs in a frame
+  with an empty sandbox, which no script reaches by design (decision 20).
+  With Word installed the file is a PDF and Find works; without it, Find
+  would need the text sent beside the page.
 - **Dragging a document onto another record moves nothing.** With no tree
   (decision 81) Move to is the way; a drop of Juno's own drag on a client's or
   a project's Documents tab is let go of. Taking it as a move there would need

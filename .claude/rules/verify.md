@@ -27,7 +27,14 @@ Run from the repo root. The project uses npm.
 
 Set `JUNO_SMOKE_DEMO=1` on a smoke run to seed a demo business, walk every
 screen and the settings window, and write a screenshot of each in both themes
-to `.smoke/`. That is the fastest honest look at a visual change.
+to `.smoke/`. That is the fastest honest look at a visual change. The walk
+opens a preview of each kind on a client's Documents tab, zooms the Word one
+with its button and with Ctrl and plus, checks Ctrl and 0 brings it back to
+100%, and checks a PDF's text is laid over its page. A smoke run starts
+neither Word nor PowerPoint, so a Word file shows as HTML there on every
+machine; `JUNO_SMOKE_OFFICE=1` lets it use them where they are installed
+(decision 83). Close any Office it leaves behind yourself, and only the ones
+you started.
 `JUNO_SMOKE_MANY=1` seeds 500 clients and prints how long the Clients list takes
 to show them and how a scroll holds up. `JUNO_SMOKE_PERF=1` is the timing run
 (`electron/main/smoke-perf.ts`): it seeds 500 clients, 150 projects, 300

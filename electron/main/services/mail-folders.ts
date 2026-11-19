@@ -332,6 +332,47 @@ export async function ensureSpecialFolder(
 }
 
 /**
+ * The folders every account is expected to have, made on the server when it
+ * has none. A mailbox a host has just opened often holds INBOX and nothing
+ * else until a webmail is first used, and without Sent a message goes out with
+ * no copy kept. Archive and Junk are left to `ensureSpecialFolder`, which makes
+ * them the first time something is filed there.
+ */
+const STANDARD_FOLDERS: MailSpecialUse[] = ["drafts", "sent", "trash"];
+
+/** Accounts whose server refused a folder this run, so a pass does not ask again. */
+const refused = new Set<string>();
+
+/**
+ * Makes Drafts, Sent and Trash for an account that lacks them, and returns the
+ * ones it made. Runs after a sync pass, once the folder list is current. A
+ * server that refuses is not asked again until Juno restarts, because every
+ * try opens a connection of its own.
+ */
+export async function ensureStandardFolders(accountId: string, db: Db = getDb()): Promise<MailFolder[]> {
+	if (refused.has(accountId)) return [];
+	const present = new Set(rows(accountId, db).map((folder) => folder.specialUse));
+	if (!present.has("inbox")) return [];
+
+	const made: MailFolder[] = [];
+	for (const use of STANDARD_FOLDERS) {
+		if (present.has(use)) continue;
+		try {
+			made.push(toRecord(await ensureSpecialFolder(accountId, use, db)));
+		} catch (error) {
+			refused.add(accountId);
+			throw error;
+		}
+	}
+	return made;
+}
+
+/** Forgets which servers refused, so a test starts from a clean run. */
+export function resetRefusedForTests(): void {
+	refused.clear();
+}
+
+/**
  * Turns a folder's sync on or off, and records that the choice was made by
  * hand, so the default the reconcile applies never overrides it again.
  */

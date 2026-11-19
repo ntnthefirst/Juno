@@ -65,7 +65,7 @@ export function AddressStep({ email, onEmail, config, picked, lookup, error, onS
 						aria-invalid={error ? true : undefined}
 						aria-describedby={error ? errorId : undefined}
 						onChange={(event) => onEmail(event.target.value)}
-						className={`${CONTROL} w-full pl-9${error ? " !border-[var(--risk)]" : ""}`}
+						className={`${CONTROL} w-full pl-9 ${error ? "!border-[var(--risk)]" : ""}`}
 					/>
 				</div>
 				{error ? (

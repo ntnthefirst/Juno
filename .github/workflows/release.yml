@@ -7,9 +7,11 @@ name: Release
 #   npm version patch      # or minor / major
 #   git push --follow-tags
 #
-# The release is created as a draft. Look at it, then publish it: publishing is
-# what makes every installed copy start downloading, and that is not something
-# to do by accident.
+# The release is created as a draft and the installers are uploaded into it.
+# The finish job then checks the draft has every file, and publishes it or
+# deletes it with its tag; nothing incomplete is ever downloadable. After a
+# release goes out, the prune job takes the files off releases older than the
+# newest five (decision 28).
 #
 # version.yml calls this workflow directly rather than letting its tag push
 # start it. A tag pushed with GITHUB_TOKEN does not trigger another workflow.
@@ -130,3 +132,48 @@ jobs:
           # macOS builds are unsigned until there is a Developer ID certificate.
           # Without this, electron-builder looks for one and fails the job.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+  # The draft is checked before anybody can download it. A release missing an
+  # installer, a blockmap or an update feed is worse than no release: the
+  # updater finds it and fails on every machine. So an incomplete draft is
+  # deleted together with its tag, and the next merge cuts the same version
+  # again. A complete one is published, as the latest release, or as a
+  # pre-release when the tag carries a suffix such as v1.4.0-beta.1. The updater
+  # skips pre-releases unless the running copy is one itself.
+  #
+  # It runs when a build failed too, because that is the incomplete draft it
+  # exists to remove.
+  finish:
+    needs: [create-release, build]
+    if: ${{ always() && needs.create-release.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Check, then publish or delete
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          BUILD: ${{ needs.build.result }}
+        run: node scripts/release-finish.mjs
+
+  # Only after a release went out. Every release keeps its page, its notes and
+  # its tag; the five newest also keep their files, and the older ones lose
+  # them, because nobody installs a version that old and each one is half a
+  # gigabyte of storage.
+  prune:
+    needs: finish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Remove the files of releases older than the newest five
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-prune.mjs

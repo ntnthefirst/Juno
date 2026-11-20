@@ -653,9 +653,8 @@ second main window.
 
 The repository is public, so `electron-updater` against its releases needs no
 feed to host and no secret beyond the token Actions already provides. A tag
-builds installers on Windows and macOS and uploads them to a **draft** release:
-publishing that release is the deliberate act that starts a rollout, so a tag
-alone can never push a build to every installed copy.
+builds installers on Windows and macOS and uploads them to a **draft** release,
+so nothing is downloadable while the two platforms are still uploading.
 
 Merging into `main` is what produces the tag. The version workflow reads the
 highest tag rather than `package.json`, because the two drift: a release is cut
@@ -665,8 +664,22 @@ is taken at its word. It calls the release workflow rather than letting its own
 tag push start it, because a tag pushed with `GITHUB_TOKEN` starts nothing, and
 an automatic release that waited for that event would quietly never run.
 
-The draft is the line this holds. Every merge produces installers; no merge
-reaches anybody's machine.
+Publishing used to be a person's step, and it was the one that got forgotten.
+Now a last job (`scripts/release-finish.mjs`) checks the draft instead:
+the build finished on both platforms, the notes are there, and every installer,
+blockmap and update feed is uploaded and not empty, with both feeds naming the
+version. A complete draft is published, as the latest release, or as a
+pre-release when the tag has a suffix (`v1.4.0-beta.1`), which the updater
+skips unless the running copy is a pre-release itself. An incomplete one is
+deleted together with its tag, so nobody can install half a release and the
+next merge cuts the same version again. So a merge into `main` now reaches
+every installed copy; `[skip release]` in the merge commit is how something
+lands without one.
+
+Only once a release is out, `scripts/release-prune.mjs` takes the uploaded files
+off every published release but the five newest. The pages, notes and tags stay,
+so what changed when stays readable; nobody installs a version that old, and
+each one is half a gigabyte.
 
 The updater is quiet by design. It checks 38 hours after the last check rather
 than every 24, because a whole number of days lands every check in the same few

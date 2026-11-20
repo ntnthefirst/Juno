@@ -6,6 +6,7 @@ import { useContextMenu } from "../../lib/use-context-menu";
 import { THREAD_DRAG_TYPE } from "./drag";
 import {
 	buildFolderTree,
+	outboxAfter,
 	SPECIAL_ICONS,
 	SPECIAL_LABELS,
 	SPECIAL_ORDER,
@@ -14,7 +15,8 @@ import {
 } from "./folder-tree";
 import { describeSync, formatSyncWhen, isSyncing } from "./format";
 
-export type MailView = MailSpecialUse;
+/** A special folder, or Outbox, which is what Juno has not sent yet rather than a folder. */
+export type MailView = MailSpecialUse | "outbox";
 export type NavSelection = { accountId: string | null; folderId: string | null; view: MailView };
 
 export type FolderAction = "new" | "newInside" | "rename" | "remove" | "toggleSync" | "markAllRead" | "empty";
@@ -28,6 +30,11 @@ type FolderNavProps = {
 	 * a draft is never news.
 	 */
 	draftCounts: Record<string, number>;
+	/**
+	 * Per account, what Outbox lists: messages waiting for approval, queued,
+	 * being sent, or that failed to go.
+	 */
+	outboxCounts: Record<string, number>;
 	sync: Record<string, MailSyncStatus>;
 	selection: NavSelection | null;
 	onSelect: (next: NavSelection) => void;
@@ -64,8 +71,9 @@ const HEADER_TEXT =
 
 /**
  * Where mail is: every account, with the six folders it has and the tree of
- * the ones somebody made. Anything not sent yet lives under that account's
- * own Drafts, not in a separate place.
+ * the ones somebody made. A draft lives under that account's Drafts, and a
+ * message on its way out, or one that did not go, under its Outbox, which Juno
+ * keeps rather than the server and lists after Sent.
  *
  * Three things this has to get right. A folder is a drop target, and it says
  * so while something is over it, because a drag with no visible target is a
@@ -78,6 +86,7 @@ export function FolderNav({
 	accounts,
 	folders,
 	draftCounts,
+	outboxCounts,
 	sync,
 	selection,
 	onSelect,
@@ -361,6 +370,51 @@ export function FolderNav({
 		);
 	}
 
+	function specialRow(accountId: string, folder: MailFolder, use: MailSpecialUse) {
+		return row({
+			key: folder.id,
+			folder,
+			label: SPECIAL_LABELS[use],
+			icon: SPECIAL_ICONS[use],
+			depth: 0,
+			active: selection?.folderId === folder.id,
+			badge: use === "drafts" ? (draftCounts[accountId] ?? 0) : folder.unreadCount,
+			onClick: () => onSelect({ accountId, folderId: folder.id, view: use }),
+			onMenu: (event) => openMenu({ kind: "folder", folder }, event),
+		});
+	}
+
+	/** Outbox for one account, or for all of them when `accountId` is null. */
+	function outboxRow(accountId: string | null) {
+		return row({
+			key: `outbox:${accountId ?? "all"}`,
+			folder: null,
+			label: "Outbox",
+			icon: "outbox",
+			depth: 0,
+			active: selection?.view === "outbox" && selection.accountId === accountId,
+			badge: accountId
+				? (outboxCounts[accountId] ?? 0)
+				: accounts.reduce((total, a) => total + (outboxCounts[a.id] ?? 0), 0),
+			onClick: () => onSelect({ accountId, folderId: null, view: "outbox" }),
+			onMenu: (event) => {
+				const account = accountId ? accounts.find((a) => a.id === accountId) : undefined;
+				openMenu(account ? { kind: "account", account } : { kind: "all" }, event);
+			},
+		});
+	}
+
+	/** The special folders' rows with Outbox put in its place among them. */
+	function withOutbox(
+		uses: MailSpecialUse[],
+		render: (use: MailSpecialUse) => React.ReactNode,
+		outbox: React.ReactNode,
+	): React.ReactNode[] {
+		const after = outboxAfter(uses);
+		if (after === null) return [outbox];
+		return uses.flatMap((use) => (use === after ? [render(use), outbox] : [render(use)]));
+	}
+
 	function nodeRows(nodes: FolderNode[], accountId: string, depth: number): React.ReactNode[] {
 		return nodes.flatMap((node) => {
 			const expanded = !collapsed[node.folder.id];
@@ -413,9 +467,11 @@ export function FolderNav({
 					</button>
 					{allClosed ? null : (
 						<div className="flex flex-col gap-px">
-							{SPECIAL_ORDER.filter((use) =>
-								accounts.some((a) => (folders[a.id] ?? []).some((f) => f.specialUse === use)),
-							).map((use) =>
+							{withOutbox(
+								SPECIAL_ORDER.filter((use) =>
+									accounts.some((a) => (folders[a.id] ?? []).some((f) => f.specialUse === use)),
+								),
+								(use) =>
 								row({
 									key: `all:${use}`,
 									folder: null,
@@ -436,6 +492,7 @@ export function FolderNav({
 									onClick: () => onSelect({ accountId: null, folderId: null, view: use }),
 									onMenu: (event) => openMenu({ kind: "view", use }, event),
 								}),
+								outboxRow(null),
 							)}
 						</div>
 					)}
@@ -507,18 +564,13 @@ export function FolderNav({
 							</p>
 						) : (
 							<div className="flex flex-col gap-px">
-								{specialFolders(list).map(({ folder, use }) =>
-									row({
-										key: folder.id,
-										folder,
-										label: SPECIAL_LABELS[use],
-										icon: SPECIAL_ICONS[use],
-										depth: 0,
-										active: selection?.folderId === folder.id,
-										badge: use === "drafts" ? (draftCounts[account.id] ?? 0) : folder.unreadCount,
-										onClick: () => onSelect({ accountId: account.id, folderId: folder.id, view: use }),
-										onMenu: (event) => openMenu({ kind: "folder", folder }, event),
-									}),
+								{withOutbox(
+									specialFolders(list).map(({ use }) => use),
+									(use) => {
+										const folder = list.find((f) => f.specialUse === use);
+										return folder ? specialRow(account.id, folder, use) : null;
+									},
+									outboxRow(account.id),
 								)}
 								{nodeRows(buildFolderTree(list), account.id, 0)}
 							</div>

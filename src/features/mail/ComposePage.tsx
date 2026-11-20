@@ -65,6 +65,12 @@ type ComposePageProps = {
 	 * top (the styled mail column), so one press closes one thing.
 	 */
 	escapeCloses?: boolean;
+	/**
+	 * Raised by the screen when somebody leaves the message for something else,
+	 * such as another folder. The page closes as Escape closes it, saving a
+	 * change that has not been saved yet first.
+	 */
+	closeRequest?: number;
 };
 
 type BlockState = Record<ComposeBlockKind, string | null>;
@@ -77,7 +83,15 @@ type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
  * form; this reads as a blank message the way a mail client's own compose
  * window does, on any size of screen.
  */
-export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escapeCloses = true }: ComposePageProps) {
+export function ComposePage({
+	seed,
+	onClose,
+	onDeleted,
+	onDone,
+	onManage,
+	escapeCloses = true,
+	closeRequest = 0,
+}: ComposePageProps) {
 	// The page replaces the list it was opened from, so the row that opened it is
 	// remembered by its id, read before any field here takes the focus, and
 	// focused again once the list is back.
@@ -655,6 +669,14 @@ export function ComposePage({ seed, onClose, onDeleted, onDone, onManage, escape
 		if (saveState === "pending") await persist(false);
 		onClose();
 	}, [busy, saveState, persist, onClose]);
+
+	// Answered once per request, so a later render does not close it again.
+	const answeredClose = useRef(closeRequest);
+	useEffect(() => {
+		if (closeRequest === answeredClose.current) return;
+		answeredClose.current = closeRequest;
+		void handleClose();
+	}, [closeRequest, handleClose]);
 
 	// The close button is gone; Escape is the way out, the same as it is on
 	// every other full-screen form in the app.

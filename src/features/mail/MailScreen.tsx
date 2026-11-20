@@ -94,6 +94,7 @@ export function MailScreen() {
 	const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
 	const [folders, setFolders] = useState<Record<string, MailFolder[]>>({});
 	const [draftCounts, setDraftCounts] = useState<Record<string, number>>({});
+	const [outboxByAccount, setOutboxByAccount] = useState<Record<string, number>>({});
 	const [selection, setSelection] = useState<NavSelection | null>(null);
 	const [search, setSearch] = useState("");
 	const [filters, setFilters] = useState<MailFilters>(NO_FILTERS);
@@ -120,6 +121,13 @@ export function MailScreen() {
 	}, []);
 	const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 	const [lastPicked, setLastPicked] = useState<string | null>(null);
+	// Juno's own messages held in Drafts or Outbox, to send or delete together.
+	const [selectedOutboxIds, setSelectedOutboxIds] = useState<string[]>([]);
+	const [lastPickedOutbox, setLastPickedOutbox] = useState<string | null>(null);
+	const [bulk, setBulk] = useState<{ kind: "send" | "delete"; ids: string[] } | null>(null);
+	const [bulkBusy, setBulkBusy] = useState(false);
+	// Raised to have an open message save and close, when somebody goes to a folder.
+	const [composeClose, setComposeClose] = useState(0);
 	const [sync, setSync] = useState<Record<string, MailSyncStatus>>({});
 	// One message at a time at the foot of the screen, sometimes with the one
 	// thing worth doing about it (undo, try again). Each new one is a new toast,
@@ -272,21 +280,25 @@ export function MailScreen() {
 		const list = await window.juno.mail.accounts.list();
 		const byAccount: Record<string, MailFolder[]> = {};
 		const drafts: Record<string, number> = {};
+		const outgoing: Record<string, number> = {};
 		for (const account of list) {
 			byAccount[account.id] = await window.juno.mail.folders.list(account.id);
 			drafts[account.id] = await window.juno.mail.threads.countDrafts(account.id);
+			const waiting = await window.juno.mail.outbox.counts(account.id);
+			outgoing[account.id] = waiting.pending + waiting.queued + waiting.failed;
 		}
-		return { list, byAccount, drafts };
+		return { list, byAccount, drafts, outgoing };
 	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
 		loadAccounts()
-			.then(({ list, byAccount, drafts }) => {
+			.then(({ list, byAccount, drafts, outgoing }) => {
 				if (cancelled) return;
 				setAccounts(list);
 				setFolders(byAccount);
 				setDraftCounts(drafts);
+				setOutboxByAccount(outgoing);
 				setSelection((current) => {
 					if (current && list.some((a) => a.id === current.accountId)) return current;
 					if (list.length === 0) return null;
@@ -376,11 +388,13 @@ export function MailScreen() {
 		};
 	}, []);
 
-	// Drafts lists the server's own drafts and, beside them, everything Juno has
-	// not sent yet: a draft, a pending approval, a queued or failed send, for
-	// the account it belongs to. A sent message drops out of the outbox rows on
-	// its own and shows up in Sent instead.
+	// Drafts lists the server's own drafts and, beside them, the drafts Juno
+	// keeps. Outbox lists what is on its way out: waiting for approval, queued,
+	// being sent, or failed. It is Juno's and not a folder on the server, so it
+	// has no threads. A sent message drops out of it and shows up in Sent.
 	const showingDrafts = selection?.view === "drafts";
+	const showingOutbox = selection?.view === "outbox";
+	const showingUnsent = showingDrafts || showingOutbox;
 	// The page title is the folder in view, and nothing while a message is being
 	// written, as the design draws it. A page of its own publishes its own trail.
 	const titleFolder = selection?.folderId
@@ -388,7 +402,9 @@ export function MailScreen() {
 		: null;
 	const folderTitle = showingDrafts
 		? SPECIAL_LABELS.drafts
-		: titleFolder
+		: showingOutbox
+			? "Outbox"
+			: titleFolder
 			? titleFolder.specialUse
 				? SPECIAL_LABELS[titleFolder.specialUse]
 				: titleFolder.name
@@ -397,7 +413,7 @@ export function MailScreen() {
 	const inTrash = selection?.view === "trash";
 	// The list there is the folder as it is, so neither a search nor a filter
 	// reaches it: a search would leave the folder for the whole account.
-	const term = showingDrafts ? "" : search.trim();
+	const term = showingUnsent ? "" : search.trim();
 	const selectedThreadId = opened?.kind === "thread" ? opened.id : null;
 	useRecentTouch("thread", selectedThreadId);
 	const selectedOutboxId = opened?.kind === "outbox" ? opened.id : null;
@@ -420,7 +436,7 @@ export function MailScreen() {
 	// What the list is asking for, without paging. The rows on screen are a page
 	// of this and select all is all of it, so both are built from the same query.
 	const matchQuery = useMemo((): MailThreadIdsQuery | null => {
-		if (!selection) return null;
+		if (!selection || selection.view === "outbox") return null;
 		const active = showingDrafts ? NO_FILTERS : filters;
 		return {
 			...(selection.accountId ? { accountId: selection.accountId } : {}),
@@ -471,15 +487,14 @@ export function MailScreen() {
 	}, [fetchThreads, term, accountsVersion]);
 
 	useEffect(() => {
-		if (!showingDrafts || !selection) return;
+		if (!showingUnsent || !selection) return;
 		let cancelled = false;
 		window.juno.mail.outbox
 			.list({
 				...(selection.accountId ? { accountId: selection.accountId } : {}),
-				// Everything not sent yet. A sent message already has its place in
-				// Sent once it syncs, so it drops out of this list rather than
-				// doubling up.
-				states: ["draft", "pending", "queued", "sending", "failed"],
+				// A sent message already has its place in Sent once it syncs, so it
+				// drops out of Outbox rather than doubling up.
+				states: showingDrafts ? ["draft"] : ["pending", "queued", "sending", "failed"],
 				limit: 200,
 			})
 			.then((rows) => {
@@ -493,7 +508,15 @@ export function MailScreen() {
 		return () => {
 			cancelled = true;
 		};
-	}, [showingDrafts, selection, outboxVersion]);
+	}, [showingUnsent, showingDrafts, selection, outboxVersion]);
+
+	// Only what is still listed counts as held. A message that has gone from
+	// the list (sent, deleted, moved to Outbox) drops out of the count and of
+	// what Send and Delete act on.
+	const heldOutboxIds = useMemo(
+		() => selectedOutboxIds.filter((id) => outboxRows?.some((m) => m.id === id) ?? false),
+		[selectedOutboxIds, outboxRows],
+	);
 
 	/**
 	 * Widens the horizon and pulls again.
@@ -620,6 +643,57 @@ export function MailScreen() {
 			setLastPicked(ids[ids.length - 1] ?? null);
 		} catch (cause: unknown) {
 			setNotice(messageOf(cause));
+		}
+	}
+
+	function toggleOutboxSelection(id: string, extend: boolean) {
+		const rows = outboxRows ?? [];
+		if (extend && lastPickedOutbox) {
+			const from = rows.findIndex((m) => m.id === lastPickedOutbox);
+			const to = rows.findIndex((m) => m.id === id);
+			if (from >= 0 && to >= 0) {
+				const span = rows.slice(Math.min(from, to), Math.max(from, to) + 1).map((m) => m.id);
+				setSelectedOutboxIds((current) => [...new Set([...current, ...span])]);
+				setLastPickedOutbox(id);
+				return;
+			}
+		}
+		setSelectedOutboxIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+		setLastPickedOutbox(id);
+	}
+
+	function clearOutboxSelection() {
+		setSelectedOutboxIds([]);
+		setLastPickedOutbox(null);
+	}
+
+	/** Sends or deletes the held messages, once the dialog has been answered. */
+	async function runBulk() {
+		if (!bulk) return;
+		setBulkBusy(true);
+		try {
+			const result =
+				bulk.kind === "send"
+					? await window.juno.mail.outbox.sendMany(bulk.ids)
+					: await window.juno.mail.outbox.removeMany(bulk.ids);
+			const verb = bulk.kind === "send" ? "queued" : "deleted";
+			const done = `${result.done.length} ${result.done.length === 1 ? "message" : "messages"} ${verb}.`;
+			const first = result.refused[0];
+			setNotice(
+				first
+					? `${done} ${result.refused.length} could not be: "${first.subject}". ${first.reason}`
+					: done,
+			);
+			setSelectedOutboxIds(result.refused.map((r) => r.id));
+			setOpened((current) =>
+				current?.kind === "outbox" && result.done.some((m) => m.id === current.id) ? null : current,
+			);
+			setOutboxVersion((v) => v + 1);
+		} catch (cause: unknown) {
+			setNotice(messageOf(cause));
+		} finally {
+			setBulkBusy(false);
+			setBulk(null);
 		}
 	}
 
@@ -1076,12 +1150,20 @@ export function MailScreen() {
 						accounts={accounts}
 						folders={folders}
 						draftCounts={draftCounts}
+						outboxCounts={outboxByAccount}
 						sync={sync}
 						selection={selection}
 						onSelect={(next) => {
+							// A message being written saves and closes, so the folder
+							// asked for is what shows rather than staying behind it.
+							if (compose) setComposeClose((n) => n + 1);
+							clearOutboxSelection();
 							// The list is about to be a different one, and threads left over
 							// from the last folder would show for a beat among the drafts.
-							if ((next.view === "drafts") !== showingDrafts) setThreads(null);
+							if (next.view !== selection?.view && (next.view === "drafts" || next.view === "outbox" || showingUnsent)) {
+								setThreads(null);
+								setOutboxRows(null);
+							}
 							setSelection(next);
 							openThread(null);
 							clearThreadSelection();
@@ -1102,10 +1184,9 @@ export function MailScreen() {
 					outbox={outboxCounts}
 					onRetry={(id) => void syncNow(id)}
 					onShowOutbox={() => {
-						const account = selection?.accountId ?? null;
-						const drafts = account ? (folders[account]?.find((f) => f.specialUse === "drafts")?.id ?? null) : null;
 						setThreads(null);
-						setSelection({ accountId: account, folderId: drafts, view: "drafts" });
+						setOutboxRows(null);
+						setSelection({ accountId: selection?.accountId ?? null, folderId: null, view: "outbox" });
 						openThread(null);
 						clearThreadSelection();
 					}}
@@ -1119,6 +1200,7 @@ export function MailScreen() {
 				{compose ? (
 					<ComposePage
 						seed={compose}
+						closeRequest={composeClose}
 						escapeCloses={!bothOpen || front === "compose"}
 						onManage={(draft, target) => {
 							setBlocksPage({ target, returnTo: draft ? { draft } : compose });
@@ -1141,9 +1223,15 @@ export function MailScreen() {
 										: "Draft saved.",
 							);
 							setOutboxVersion((v) => v + 1);
+							// A saved draft is under Drafts, and a message on its way out
+							// under Outbox, where it can be followed until it has gone.
 							const draftsFolderId =
 								folders[message.accountId]?.find((f) => f.specialUse === "drafts")?.id ?? null;
-							setSelection({ accountId: message.accountId, folderId: draftsFolderId, view: "drafts" });
+							setSelection(
+								message.state === "draft"
+									? { accountId: message.accountId, folderId: draftsFolderId, view: "drafts" }
+									: { accountId: message.accountId, folderId: null, view: "outbox" },
+							);
 							setOpened({ kind: "outbox", id: message.id });
 						}}
 					/>
@@ -1159,7 +1247,7 @@ export function MailScreen() {
 						onEditDraft={(id) => void editOutgoing(id)}
 						onReplyOutgoing={(id, mode) => void replyOutgoing(id, mode)}
 					/>
-				) : showingDrafts && selectedOutbox ? (
+				) : showingUnsent && selectedOutbox ? (
 					<OutboxDetail
 						key={`${selectedOutbox.id}:${selectedOutbox.updatedAt}`}
 						message={selectedOutbox}
@@ -1189,7 +1277,39 @@ export function MailScreen() {
 							onSelectAll={() => void selectEveryThread()}
 							onClearSelection={clearThreadSelection}
 							onAction={handleThreadAction}
-							heading={showingDrafts ? "Drafts" : undefined}
+							heading={showingDrafts ? "Drafts" : showingOutbox ? "Outbox" : undefined}
+							{...(showingUnsent
+								? {
+										unsent: {
+											visibleIds: (outboxRows ?? []).map((m) => m.id),
+											selectedIds: heldOutboxIds,
+											onSelectAll: () => {
+												setSelectedOutboxIds((outboxRows ?? []).map((m) => m.id));
+												setLastPickedOutbox(null);
+											},
+											onClear: clearOutboxSelection,
+											actions: [
+												...(showingDrafts
+													? [
+															{
+																id: "send",
+																icon: "sent" as const,
+																label: "Send",
+																onSelect: () => setBulk({ kind: "send", ids: heldOutboxIds }),
+															},
+														]
+													: []),
+												{
+													id: "delete",
+													icon: "remove" as const,
+													label: "Delete",
+													danger: true,
+													onSelect: () => setBulk({ kind: "delete", ids: heldOutboxIds }),
+												},
+											],
+										},
+									}
+								: {})}
 						/>
 
 						{selectedFolder && !selectedFolder.syncEnabled ? (
@@ -1209,7 +1329,7 @@ export function MailScreen() {
 						<div className="min-h-0 flex-1 overflow-y-auto" onContextMenu={listMenu}>
 							<ThreadList
 								threads={threads}
-								{...(showingDrafts
+								{...(showingUnsent
 									? {
 											outbox: {
 												messages: outboxRows,
@@ -1230,10 +1350,20 @@ export function MailScreen() {
 													const row = outboxRows?.find((m) => m.id === id);
 													if (row) setOutboxDelete(row);
 												},
+												selectedIds: heldOutboxIds,
+												onToggleSelect: toggleOutboxSelection,
+												...(showingOutbox
+													? {
+															empty: {
+																title: "Nothing waiting to go out",
+																description: "A message you send waits here until it has gone.",
+															},
+														}
+													: {}),
 											},
 										}
 									: {})}
-								error={showingDrafts ? (listError ?? outboxError) : listError}
+								error={showingUnsent ? (listError ?? outboxError) : listError}
 								searching={term.length > 0}
 								inTrash={inTrash}
 								selectedId={selectedThreadId}
@@ -1253,7 +1383,7 @@ export function MailScreen() {
 								</div>
 							) : null}
 
-							{!showingDrafts && term.length === 0 ? (
+							{!showingUnsent && term.length === 0 ? (
 								<HorizonNote
 									accounts={
 										selection?.accountId
@@ -1282,6 +1412,32 @@ export function MailScreen() {
 						}}
 					/>
 				</div>
+			) : null}
+
+			{bulk ? (
+				<Dialog
+					title={bulk.kind === "send" ? "Send messages" : "Delete messages"}
+					onClose={() => (!bulkBusy ? setBulk(null) : undefined)}
+					width="narrow"
+				>
+					<p className="mt-4 text-[var(--ink-muted)]">
+						{bulk.kind === "send"
+							? `Send ${bulk.ids.length} ${bulk.ids.length === 1 ? "message" : "messages"} as they are? Once sent they cannot be called back.`
+							: `Delete ${bulk.ids.length} ${bulk.ids.length === 1 ? "message" : "messages"}? They will not be sent.`}
+					</p>
+					<div className="mt-6 flex justify-end gap-2">
+						<Button disabled={bulkBusy} onClick={() => setBulk(null)}>
+							Keep
+						</Button>
+						<Button
+							variant={bulk.kind === "send" ? "primary" : "danger"}
+							disabled={bulkBusy}
+							onClick={() => void runBulk()}
+						>
+							{bulk.kind === "send" ? `Send ${bulk.ids.length}` : `Delete ${bulk.ids.length}`}
+						</Button>
+					</div>
+				</Dialog>
 			) : null}
 
 			{outboxDelete ? (

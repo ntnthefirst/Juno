@@ -25,6 +25,18 @@ type ThreadToolbarProps = {
 	onAction: (action: ThreadAction, ids: string[]) => void;
 	/** A title in place of search, for a list where searching makes no sense. */
 	heading?: string;
+	/**
+	 * In Drafts and Outbox, Juno's own messages held for sending or deleting
+	 * together. At rest the box takes these when the list has any, and while
+	 * any are held the bar offers what can be done to them.
+	 */
+	unsent?: {
+		visibleIds: string[];
+		selectedIds: string[];
+		onSelectAll: () => void;
+		onClear: () => void;
+		actions: SelectionAction[];
+	};
 };
 
 /**
@@ -53,7 +65,10 @@ export function ThreadToolbar({
 	onClearSelection,
 	onAction,
 	heading,
+	unsent,
 }: ThreadToolbarProps) {
+	const holdingUnsent = (unsent?.selectedIds.length ?? 0) > 0;
+	const boxTakesUnsent = unsent !== undefined && unsent.visibleIds.length > 0;
 	const hasSelection = selectedIds.length > 0;
 	const allSelected = coversAll(matchingIds ?? visibleIds, selectedIds);
 	const act = (action: ThreadAction) => () => onAction(action, selectedIds);
@@ -74,7 +89,15 @@ export function ThreadToolbar({
 			{heading ? null : (
 				<MailSearchBar search={search} onSearch={onSearch} filters={filters} onFilters={onFilters} />
 			)}
-			{hasSelection ? (
+			{unsent && holdingUnsent ? (
+				<SelectionBar
+					count={unsent.selectedIds.length}
+					allSelected={coversAll(unsent.visibleIds, unsent.selectedIds)}
+					onSelectAll={unsent.onSelectAll}
+					onClear={unsent.onClear}
+					actions={unsent.actions}
+				/>
+			) : hasSelection ? (
 				<SelectionBar
 					count={selectedIds.length}
 					allSelected={allSelected}
@@ -87,9 +110,9 @@ export function ThreadToolbar({
 					<SelectAllButton
 						checked={false}
 						indeterminate={false}
-						disabled={visibleIds.length === 0}
-						onSelectAll={onSelectAll}
-						onClearSelection={onClearSelection}
+						disabled={boxTakesUnsent ? false : visibleIds.length === 0}
+						onSelectAll={boxTakesUnsent ? unsent.onSelectAll : onSelectAll}
+						onClearSelection={boxTakesUnsent ? unsent.onClear : onClearSelection}
 					/>
 					{heading ? <h2 className="min-w-0 text-h3 font-[var(--weight-medium)]">{heading}</h2> : null}
 				</div>

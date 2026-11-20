@@ -30,8 +30,9 @@ export type ThreadAction =
 	| "deleteForever";
 
 /**
- * What Juno has not sent yet, listed among the threads. Given only for the
- * Drafts view, where these rows and the server's own drafts share one list.
+ * What Juno has not sent yet, listed among the threads. Given for Drafts,
+ * where Juno's drafts and the server's share one list, and for Outbox, which
+ * has only these rows.
  */
 export type ThreadListOutbox = {
 	/** `null` while the outbox is still loading. */
@@ -43,6 +44,11 @@ export type ThreadListOutbox = {
 	onEdit?: (id: string) => void;
 	/** Asks to delete a message that has not gone out. */
 	onDelete?: (id: string) => void;
+	/** What an empty list says, when it is not the folder's usual line. */
+	empty?: { title: string; description: string };
+	/** The rows held for sending or deleting together. */
+	selectedIds?: string[];
+	onToggleSelect?: (id: string, extend: boolean) => void;
 };
 
 type ThreadListProps = {
@@ -170,7 +176,11 @@ export function ThreadList({
 				description="No mail matches that search. Try another word or clear the filters."
 			/>
 		) : (
-			<EmptyState icon="mail" title="No messages here" description="This folder has no mail yet." />
+			<EmptyState
+				icon="mail"
+				title={outbox?.empty?.title ?? "No messages here"}
+				description={outbox?.empty?.description ?? "This folder has no mail yet."}
+			/>
 		);
 	}
 	const entries = merged;
@@ -291,6 +301,9 @@ export function ThreadList({
 										onRetry={outbox?.onRetry}
 										onEdit={outbox?.onEdit}
 										onDelete={outbox?.onDelete}
+										checked={outbox?.selectedIds?.includes(entry.id) ?? false}
+										selecting={(outbox?.selectedIds?.length ?? 0) > 0}
+										{...(outbox?.onToggleSelect ? { onToggleSelect: outbox.onToggleSelect } : {})}
 										buttonRef={(element) => {
 											if (element) rows.current.set(entry.id, element);
 											else rows.current.delete(entry.id);

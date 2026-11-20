@@ -721,15 +721,16 @@ export async function linkProject(
 
 /**
  * How many rows Drafts lists: the server's drafts, one per conversation as the
- * list draws them, and every message Juno has not sent yet, whatever it waits
- * on (decision 78). The sidebar shows this number beside Drafts, so the count
- * and the list are the same two queries and cannot disagree. Leave the account
- * out for every account together.
+ * list draws them, and the drafts Juno keeps. A message waiting for approval,
+ * queued or failed is under Outbox instead (decision 84). The sidebar shows
+ * this number beside Drafts, so the count and the list are the same two
+ * queries and cannot disagree. Leave the account out for every account
+ * together.
  */
 export async function countDrafts(accountId?: string, db: Db = getDb()): Promise<number> {
 	const server = await listThreadIds({ ...(accountId ? { accountId } : {}), folderSpecialUse: "drafts" }, db);
 	const waiting = await outboxCounts(accountId, db);
-	return server.length + waiting.drafts + waiting.pending + waiting.queued + waiting.failed;
+	return server.length + waiting.drafts;
 }
 
 /** How many live threads point at a client, for the client screen. */

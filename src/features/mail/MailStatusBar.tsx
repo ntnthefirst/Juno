@@ -1,6 +1,7 @@
+import { useEffect, useId, useRef, useState } from "react";
 import type { MailAccount, MailOutboxCounts, MailSyncStatus } from "@shared/types";
 import { Icon } from "../../components/Icon";
-import { describeSync, formatSyncWhen, isSyncing } from "./format";
+import { STATUS_DOT, statusLines, summarise } from "./mail-status";
 
 type MailStatusBarProps = {
 	accounts: MailAccount[];
@@ -9,136 +10,110 @@ type MailStatusBarProps = {
 	online: boolean;
 	outbox: MailOutboxCounts | null;
 	onRetry: (accountId: string) => void;
-	/** Shows Drafts, where everything not sent yet is listed. */
+	/** Shows Outbox, where everything on its way out is listed. */
 	onShowOutbox: () => void;
 };
 
-type Line = {
-	key: string;
-	tone: "ok" | "busy" | "warn" | "risk";
-	text: string;
-	detail?: string;
-	action?: { label: string; onClick: () => void };
-};
-
-const DOT: Record<Line["tone"], string> = {
-	ok: "bg-[var(--ok)]",
-	busy: "bg-[var(--accent)]",
-	warn: "bg-[var(--warn)]",
-	risk: "bg-[var(--risk)]",
-};
-
 /**
- * What mail is doing right now, in words, at the foot of the folders: offline
- * or not, which account is syncing and how far it got, which one failed and
- * why with a way to try again, and what is still waiting to go out.
+ * What mail is doing, in one line at the foot of the folders, with a dot that
+ * says how it stands. A click opens the list of every part on its own: each
+ * account, anything that did not go, anything waiting for you, each with a
+ * way to act on it.
  *
- * A mail client people trust says this without being asked. A sync that
- * failed an hour ago and a message that never left are exactly the things a
- * person does not notice until a client asks where the answer is, so each one
- * has a line here until it is resolved, and "Up to date" only shows when
- * nothing else does.
+ * A mail client people trust says this without being asked, but six stacked
+ * lines pushed the folders up every time two things went wrong at once. So the
+ * line counts, and the list explains (decision 84).
  */
 export function MailStatusBar({ accounts, sync, online, outbox, onRetry, onShowOutbox }: MailStatusBarProps) {
-	const lines: Line[] = [];
+	const [open, setOpen] = useState(false);
+	const root = useRef<HTMLDivElement>(null);
+	const listId = useId();
+	const lines = statusLines(accounts, sync, online, outbox, onRetry, onShowOutbox);
+	const summary = summarise(lines, accounts);
 
-	if (!online) {
-		lines.push({
-			key: "offline",
-			tone: "warn",
-			text: "Offline",
-			detail: "Everything on this machine still opens. Juno syncs and sends when the connection is back.",
-		});
-	}
-
-	for (const account of accounts) {
-		const status = sync[account.id] ?? null;
-		if (isSyncing(status)) {
-			lines.push({ key: `sync:${account.id}`, tone: "busy", text: `${account.label}: ${describeSync(status, account.lastSyncAt)}` });
-			continue;
+	// Closes on a click anywhere else and on Escape, like any popover.
+	useEffect(() => {
+		if (!open) return;
+		function onDown(event: MouseEvent) {
+			if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
 		}
-		const error = status?.phase === "failed" ? status.error : account.lastSyncError;
-		if (error && online) {
-			lines.push({
-				key: `fail:${account.id}`,
-				tone: "risk",
-				text: `${account.label} did not sync`,
-				detail: error,
-				action: { label: "Try again", onClick: () => onRetry(account.id) },
-			});
+		function onKey(event: KeyboardEvent) {
+			if (event.key === "Escape") setOpen(false);
 		}
-	}
-
-	if (outbox) {
-		const waiting = outbox.queued;
-		if (outbox.failed > 0) {
-			lines.push({
-				key: "outbox-failed",
-				tone: "risk",
-				text: `${outbox.failed} ${outbox.failed === 1 ? "message was" : "messages were"} not sent`,
-				action: { label: "Show", onClick: onShowOutbox },
-			});
-		}
-		if (waiting > 0) {
-			lines.push({
-				key: "outbox-waiting",
-				tone: online ? "busy" : "warn",
-				text: `${waiting} waiting to send`,
-				action: { label: "Show", onClick: onShowOutbox },
-			});
-		}
-		if (outbox.pending > 0) {
-			lines.push({
-				key: "outbox-pending",
-				tone: "warn",
-				text: `${outbox.pending} waiting for your approval`,
-				action: { label: "Show", onClick: onShowOutbox },
-			});
-		}
-	}
-
-	if (lines.length === 0) {
-		const last = accounts
-			.map((account) => account.lastSyncAt)
-			.filter((at): at is string => at !== null)
-			.sort()
-			.pop();
-		lines.push({ key: "ok", tone: "ok", text: last ? `Up to date, synced ${formatSyncWhen(last)}` : "Not synced yet" });
-	}
+		document.addEventListener("mousedown", onDown);
+		document.addEventListener("keydown", onKey);
+		return () => {
+			document.removeEventListener("mousedown", onDown);
+			document.removeEventListener("keydown", onKey);
+		};
+	}, [open]);
 
 	return (
-		<div role="status" aria-live="polite" className="flex flex-none flex-col gap-1 border-t border-[var(--line)] px-4 py-3">
-			{lines.map((line) => (
-				<div key={line.key} className="flex min-w-0 items-start gap-2">
-					{line.tone === "busy" ? (
-						<Icon name="sync" size={12} className="mt-[3px] flex-none animate-spin text-[var(--accent)]" />
-					) : (
-						<span aria-hidden className={`mt-[6px] h-2 w-2 flex-none rounded-[var(--radius-full)] ${DOT[line.tone]}`} />
-					)}
-					<div className="min-w-0 flex-1">
-						<p
-							className={`truncate text-dense ${line.tone === "risk" ? "text-[var(--risk)]" : "text-[var(--ink-muted)]"}`}
-							title={line.detail ?? line.text}
-						>
-							<span className="tabular">{line.text}</span>
-						</p>
-						{line.detail ? (
-							<p data-selectable className="line-clamp-2 text-micro text-[var(--ink-muted)]" title={line.detail}>
-								{line.detail}
-							</p>
-						) : null}
-					</div>
-					{line.action ? (
-						<button
-							type="button"
-							onClick={line.action.onClick}
-							className="flex-none rounded-[var(--radius-sm)] px-1.5 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)] hover:bg-[var(--hover)]"
-						>
-							{line.action.label}
-						</button>
-					) : null}
+		<div ref={root} className="relative flex-none border-t border-[var(--line)] px-2 py-1.5">
+			{open ? (
+				<div
+					id={listId}
+					role="dialog"
+					aria-label="Mail status"
+					data-mail-status-list
+					className="absolute right-2 bottom-full left-2 z-20 mb-1 flex animate-scale flex-col gap-0.5 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[var(--shadow-popover)]"
+				>
+					{lines.map((line) => (
+						<div key={line.key} className="flex min-w-0 items-start gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2">
+							{line.tone === "busy" ? (
+								<Icon name="sync" size={12} className="mt-[4px] flex-none animate-spin text-[var(--accent)]" />
+							) : (
+								<span aria-hidden className={`mt-[6px] h-2 w-2 flex-none rounded-[var(--radius-full)] ${STATUS_DOT[line.tone]}`} />
+							)}
+							<div className="min-w-0 flex-1">
+								<p className={`text-dense ${line.tone === "risk" ? "text-[var(--risk)]" : "text-[var(--ink)]"}`}>
+									<span className="tabular">{line.text}</span>
+								</p>
+								{line.detail ? (
+									<p data-selectable className="text-micro text-[var(--ink-muted)]">
+										{line.detail}
+									</p>
+								) : null}
+							</div>
+							{line.action ? (
+								<button
+									type="button"
+									onClick={() => {
+										setOpen(false);
+										line.action?.onClick();
+									}}
+									className="flex-none whitespace-nowrap rounded-[var(--radius-sm)] px-1.5 py-0.5 text-micro font-[var(--weight-medium)] text-[var(--accent)] hover:bg-[var(--hover)]"
+								>
+									{line.action.label}
+								</button>
+							) : null}
+						</div>
+					))}
 				</div>
-			))}
+			) : null}
+			<button
+				type="button"
+				onClick={() => setOpen((value) => !value)}
+				aria-expanded={open}
+				aria-controls={open ? listId : undefined}
+				data-mail-status
+				data-tone={summary.tone}
+				className="flex h-8 w-full min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2 text-left hover:bg-[var(--hover)]"
+			>
+				{summary.busy ? (
+					<Icon name="sync" size={12} className="flex-none animate-spin text-[var(--accent)]" />
+				) : (
+					<span aria-hidden className={`h-2 w-2 flex-none rounded-[var(--radius-full)] ${STATUS_DOT[summary.tone]}`} />
+				)}
+				<span role="status" aria-live="polite" className="tabular min-w-0 flex-1 truncate text-dense text-[var(--ink-muted)]">
+					{summary.text}
+				</span>
+				<Icon
+					name="chevron-down"
+					size={12}
+					className={`flex-none text-[var(--ink-muted)] transition-transform duration-[var(--duration-fast)] ease-[var(--ease)] ${open ? "" : "rotate-180"}`}
+				/>
+			</button>
 		</div>
 	);
 }

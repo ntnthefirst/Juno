@@ -54,8 +54,8 @@ publish:
   provider: github
   owner: ntnthefirst
   repo: Juno
-  # A draft, so a tag never starts an automatic rollout on its own. Publishing
-  # the release in GitHub is the deliberate step that does.
+  # A draft, so nothing is downloadable while the two platforms upload. The
+  # finish job in release.yml publishes it once every file is there.
   releaseType: draft
 
 # The product name decides app.getPath("userData"). Changing it moves the

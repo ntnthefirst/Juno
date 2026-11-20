@@ -4,9 +4,9 @@ name: Version
 # writes it into package.json, tags it, and hands the tag to release.yml, which
 # builds the installers on Windows and macOS and uploads them.
 #
-# The release is still a draft at the end of it. Publishing is what makes every
-# installed copy start downloading, and that stays a deliberate act by a person
-# (decision 28 in docs/decisions.md).
+# release.yml checks the draft it builds and publishes it only when every file
+# is there, so a merge into main reaches every installed copy (decision 28 in
+# docs/decisions.md). Use [skip release] below when it should not.
 #
 # The number comes from the highest tag that exists, not from package.json,
 # because the two drift: a release is cut on main and the branch it was merged
@@ -61,22 +61,30 @@ jobs:
 
           # || true because head closes the pipe early, which under pipefail
           # is a failure rather than a list that was longer than one line.
-          latest=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
+          # versionsort.suffix puts v1.4.0-beta.1 before v1.4.0, not after it.
+          latest=$(git -c versionsort.suffix=- tag --list 'v*' --sort=-v:refname | head -n1 || true)
           current=$(node -p "require('./package.json').version")
           echo "Highest tag: ${latest:-none}. In package.json: $current."
 
           next=$(node -e '
             const [current, latest] = process.argv.slice(1);
-            const parts = (v) => v.replace(/^v/, "").split(".").map(Number);
+            // A beta is a suffix on the number (1.4.0-beta.1), so the numbers
+            // are compared without it.
+            const parts = (v) => v.replace(/^v/, "").split("-")[0].split(".").map(Number);
+            const beta = (v) => v.includes("-");
             const ahead = (a, b) => {
               const [x, y] = [parts(a), parts(b)];
               for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
               return false;
             };
-            if (!latest || ahead(current, latest)) {
-              // Somebody bumped it deliberately, which is how a minor or a
-              // major release is asked for. Take them at their word.
+            const same = (a, b) => !ahead(a, b) && !ahead(b, a);
+            if (!latest || ahead(current, latest) || (beta(current) && beta(latest) && same(current, latest))) {
+              // Somebody bumped it deliberately, which is how a minor, a
+              // major or a beta is asked for. Take them at their word.
               console.log(current);
+            } else if (beta(latest)) {
+              // After a beta comes the release it was a beta of.
+              console.log(parts(latest).join("."));
             } else {
               const [major, minor, patch] = parts(latest);
               console.log(`${major}.${minor}.${patch + 1}`);

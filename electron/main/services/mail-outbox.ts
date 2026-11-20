@@ -21,6 +21,7 @@ import type {
 	MailDraftPatch,
 	MailOutboxAttachment,
 	MailOutboxCounts,
+	MailOutboxManyResult,
 	MailFileKeep,
 	MailOutboxFile,
 	MailMessageClient,
@@ -1135,6 +1136,44 @@ export async function remove(id: string, db: Db = getDb()): Promise<MailOutboxMe
 	const record = toRecord({ ...row, deletedAt: stamp }, null, [], []);
 	notifyChanged(record);
 	return record;
+}
+
+/** Runs `one` on each id in turn, and keeps what each one did or why it could not. */
+async function eachOf(
+	ids: string[],
+	one: (id: string) => Promise<MailOutboxMessage>,
+	db: Db,
+): Promise<MailOutboxManyResult> {
+	if (!Array.isArray(ids) || ids.length === 0) throw new Error("Select at least one message first.");
+	const result: MailOutboxManyResult = { done: [], refused: [] };
+	for (const id of [...new Set(ids)]) {
+		try {
+			result.done.push(await one(id));
+		} catch (cause) {
+			const row = db.select({ subject: mailOutbox.subject }).from(mailOutbox).where(eq(mailOutbox.id, id)).get();
+			result.refused.push({
+				id,
+				subject: row?.subject || "(no subject)",
+				reason: cause instanceof Error ? cause.message : String(cause),
+			});
+		}
+	}
+	return result;
+}
+
+/**
+ * Queues several drafts at once, from a selection in Drafts. Each goes
+ * through `requestSend` on its own, with the same checks, so a draft with no
+ * recipient is refused and named while the others go. Like `requestSend` it
+ * is the window's alone: the press is the confirmation.
+ */
+export async function requestSendMany(ids: string[], db: Db = getDb()): Promise<MailOutboxManyResult> {
+	return eachOf(ids, (id) => requestSend(id, db), db);
+}
+
+/** Deletes several messages that have not gone out, each through `remove`. */
+export async function removeMany(ids: string[], db: Db = getDb()): Promise<MailOutboxManyResult> {
+	return eachOf(ids, (id) => remove(id, db), db);
 }
 
 /**

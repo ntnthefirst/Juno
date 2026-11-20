@@ -299,3 +299,45 @@ describe("a folder Juno needs and the server lacks", () => {
 		expect(server.folders.filter((folder) => folder.path === "INBOX.Sent")).toHaveLength(1);
 	});
 });
+
+describe("a new mailbox with only an inbox", () => {
+	beforeEach(() => {
+		folders.resetRefusedForTests();
+	});
+
+	it("gets Drafts, Sent and Trash, and keeps the Sent it already has", async () => {
+		const made = await folders.ensureStandardFolders(accountId, db);
+
+		expect(made.map((folder) => folder.specialUse).sort()).toEqual(["drafts", "trash"]);
+		expect(pathsOf(server.folders)).toEqual(["INBOX", "INBOX.Sent", "INBOX.Drafts", "INBOX.Trash"]);
+		const uses = (await folders.list(accountId, db)).map((folder) => folder.specialUse);
+		expect(uses).toEqual(["inbox", "drafts", "sent", "trash"]);
+	});
+
+	it("makes them beside the inbox when the server has nothing else", async () => {
+		server.folders = [{ path: "INBOX", name: "INBOX", delimiter: "/", specialUse: "inbox" }];
+		await sync.syncAccount(accountId, db);
+
+		await folders.ensureStandardFolders(accountId, db);
+
+		expect(pathsOf(server.folders)).toEqual(["INBOX", "Drafts", "Sent", "Trash"]);
+	});
+
+	it("asks for nothing when every folder is there", async () => {
+		await folders.ensureStandardFolders(accountId, db);
+		const opened = server.writersOpened;
+
+		expect(await folders.ensureStandardFolders(accountId, db)).toEqual([]);
+		expect(server.writersOpened).toBe(opened);
+	});
+
+	it("does not ask a server again once it refused", async () => {
+		server.failWrites = new Error("NO [CANNOT] Permission denied");
+		await expect(folders.ensureStandardFolders(accountId, db)).rejects.toThrow();
+		const opened = server.writersOpened;
+		server.failWrites = null;
+
+		expect(await folders.ensureStandardFolders(accountId, db)).toEqual([]);
+		expect(server.writersOpened).toBe(opened);
+	});
+});

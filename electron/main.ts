@@ -58,6 +58,7 @@ import { configureMailboxWriter } from "./main/services/mail-writer";
 import * as mailSend from "./main/services/mail-send";
 import { imapSentAppender, smtpTransport } from "./main/services/mail-smtp";
 import * as mailActions from "./main/services/mail-actions";
+import * as mailFolders from "./main/services/mail-folders";
 import * as mailRules from "./main/services/mail-rules";
 import * as mailSync from "./main/services/mail-sync";
 import * as calendarSubscriptions from "./main/services/calendar-subscriptions";
@@ -176,8 +177,12 @@ if (!app.requestSingleInstanceLock()) {
 			mailDir: mailDir(),
 			isPaused: () => lock.isLocked(),
 			afterInbox: (accountId, db) => mailRules.runForAccount(accountId, db, { isPaused: () => lock.isLocked() }),
-			// A message read while the server was out of reach is marked read there now.
-			afterPass: (accountId, db) => mailActions.pushPendingSeen(accountId, db),
+			// A new mailbox gets its Drafts, Sent and Trash, and a message read while
+			// the server was out of reach is marked read there now.
+			afterPass: async (accountId, db) => {
+				await mailFolders.ensureStandardFolders(accountId, db).catch(() => undefined);
+				return mailActions.pushPendingSeen(accountId, db);
+			},
 		});
 		configureMailboxSource(openImapSource);
 		configureMailboxWriter(openImapWriter);

@@ -2,6 +2,15 @@
 
 Newest first. The rules for writing an entry are in `.claude/rules/release-notes.md`.
 
+## 1.3.2
+Released: 2026-11-19
+
+Two fixes for adding a mail account.
+
+### Fixes
+- A new mail account with only an inbox used to stay without Drafts, Sent or Trash, which Juno makes on the next sync.
+- The mail icon in the Address field of Add mail account used to sit on top of the text.
+
 ## 1.3.1
 Released: 2026-11-16
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MailFolder, MailSpecialUse } from "@shared/types";
-import { buildFolderTree, commonPrefix, flattenTree, specialFolders } from "./folder-tree";
+import { buildFolderTree, commonPrefix, flattenTree, outboxAfter, specialFolders } from "./folder-tree";
 
 function folder(path: string, specialUse: MailSpecialUse | null = null, delimiter = "."): MailFolder {
 	return {
@@ -90,5 +90,14 @@ describe("the folder tree", () => {
 			["B", 1],
 			["C", 0],
 		]);
+	});
+});
+
+describe("where Outbox is listed", () => {
+	it("follows Sent, or Drafts, or Inbox, whichever the account has last", () => {
+		expect(outboxAfter(["inbox", "drafts", "sent", "trash"])).toBe("sent");
+		expect(outboxAfter(["inbox", "drafts", "trash"])).toBe("drafts");
+		expect(outboxAfter(["inbox"])).toBe("inbox");
+		expect(outboxAfter([])).toBeNull();
 	});
 });

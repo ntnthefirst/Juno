@@ -36,6 +36,19 @@ const laneColor = (lane: number) => LANE_COLORS[lane % LANE_COLORS.length]!;
 const laneX = (lane: number) => GUTTER + lane * LANE;
 const rowY = (index: number) => TOP + index * ROW + ROW / 2;
 
+/** A message on its way out, or one that did not go: what Outbox lists. */
+function inOutbox(entry: ThreadEntry): boolean {
+	return entry.kind === "outgoing" && ["pending", "queued", "sending", "failed"].includes(entry.message.state);
+}
+
+/** Where an outbox row's time would be, it says how far the message got. */
+const OUTBOX_WHEN: Record<"pending" | "queued" | "sending" | "failed", { text: string; tone: string }> = {
+	pending: { text: "Waiting for you", tone: "text-[var(--warn)]" },
+	queued: { text: "In Outbox", tone: "text-[var(--accent)]" },
+	sending: { text: "Sending", tone: "text-[var(--accent)]" },
+	failed: { text: "Not sent", tone: "text-[var(--risk)]" },
+};
+
 function snippetOf(entry: ThreadEntry): string {
 	if (entry.kind === "message") return entry.message.snippet;
 	return entry.message.bodyText.replace(/\s+/g, " ").trim();
@@ -58,7 +71,9 @@ function edgePath(from: { x: number; y: number }, to: { x: number; y: number }):
 
 /**
  * The whole conversation as a graph: what came in, what went out, and what is
- * still a draft or waiting to go. A second answer to the same mail, or a mail
+ * still a draft or in Outbox. A message in Outbox carries an Outbox chip, as a
+ * synced one carries its folder, and says where its time would be how far it
+ * got, in red with a red node when it did not go. A second answer to the same mail, or a mail
  * sent on to somebody else, leaves the line as a branch in a colour of its own.
  * Choosing a row puts it in the reading pane and changes nothing about the
  * messages themselves.
@@ -107,7 +122,8 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 						})}
 						{entries.map((entry, index) => {
 							const row = graph.rows[index]!;
-							const color = laneColor(row.lane);
+							const color =
+								entry.kind === "outgoing" && entry.message.state === "failed" ? "var(--risk)" : laneColor(row.lane);
 							const mine = entry.kind === "outgoing" || entry.message.folderUse === "sent";
 							const unsent = entry.kind === "outgoing" && entry.message.state !== "sent";
 							const selected = entry.message.id === openId;
@@ -151,6 +167,7 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 							const when =
 								entry.kind === "message" ? (entry.message.sentAt ?? entry.message.internalDate) : entry.message.date;
 							const state = outgoing ? entry.message.state : null;
+							const outbox = entry.kind === "outgoing" && inOutbox(entry) ? OUTBOX_WHEN[entry.message.state as keyof typeof OUTBOX_WHEN] : null;
 							const hasAttachment =
 								entry.kind === "message" ? entry.message.hasAttachments : entry.message.attachments.length > 0;
 							const text = snippetOf(entry) || "(no text)";
@@ -186,9 +203,15 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 											{hasAttachment ? (
 												<Icon name="attachment" size={12} className="shrink-0 text-[var(--ink-muted)]" />
 											) : null}
-											<span className="tabular ml-auto shrink-0 text-dense text-[var(--ink-muted)]">
-												{formatWhen(when)}
-											</span>
+											{outbox ? (
+												<span className={`ml-auto shrink-0 text-dense font-[var(--weight-medium)] ${outbox.tone}`}>
+													{outbox.text}
+												</span>
+											) : (
+												<span className="tabular ml-auto shrink-0 text-dense text-[var(--ink-muted)]">
+													{formatWhen(when)}
+												</span>
+											)}
 										</span>
 										{mine ? (
 											<span className="truncate text-dense text-[var(--ink-muted)]">
@@ -210,7 +233,11 @@ export function ConversationPanel({ entries, openId, onSelect }: ConversationPan
 														: entry.message.folderName}
 												</span>
 											) : null}
-											{state !== null && state !== "sent" ? (
+											{outbox ? (
+												<span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--sunken)] px-1.5 text-micro text-[var(--ink-muted)]">
+													Outbox
+												</span>
+											) : state !== null && state !== "sent" ? (
 												<span
 													className={`shrink-0 rounded-[var(--radius-sm)] px-1.5 text-micro ${STATE_TONES[state]}`}
 												>

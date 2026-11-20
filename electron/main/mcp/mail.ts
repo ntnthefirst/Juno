@@ -479,8 +479,9 @@ export const mailTools: ToolDescriptor[] = [
 		name: "mail.threads.count_drafts",
 		title: "Count drafts",
 		description:
-			"How many rows Drafts lists: the server's draft conversations plus every message Juno has not sent yet " +
-			"(drafts, waiting for approval, queued and failed). The same number the mail sidebar shows beside Drafts. " +
+			"How many rows Drafts lists: the server's draft conversations plus the drafts Juno keeps. " +
+			"A message waiting for approval, queued or failed is under Outbox instead; mail.outbox.list with those states lists it. " +
+			"The same number the mail sidebar shows beside Drafts. " +
 			"Leave account_id out for every account together.",
 		readOnly: true,
 		requiresConfirmation: false,

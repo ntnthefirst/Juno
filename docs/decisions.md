@@ -2982,3 +2982,46 @@ file.
 ships inside the app and keeps their layout, which would replace the Office
 route and the iWork words both; or the owner asking for edits in the
 preview, which would be an editor and a decision of its own.
+
+## 84. Outbox is a place of its own, and mail's status is one line
+
+Drafts used to list everything Juno had not sent: drafts, messages waiting
+for approval, queued ones and ones that failed (decision 78). A message that
+did not go then sat among the drafts, where nobody looks for it, and the
+foot of the folders stacked a line for every account and every kind of
+waiting message until it pushed the folders up.
+
+- **Outbox is listed under every account, after Sent** (after Drafts or
+  Inbox when there is no Sent), and once under All accounts. It is Juno's and
+  not a folder on the server: it lists what is waiting for approval, queued,
+  being sent or failed, has no threads, takes no drops and has no folder
+  menu. Its count is how many it lists. Drafts lists the server's drafts and
+  the drafts Juno keeps, and `mail.threads.count_drafts` counts the same.
+  Sending a message opens Outbox on it, where it can be followed until it
+  has gone; saving a draft opens Drafts.
+- **The conversation shows it too.** A reply in Outbox carries an Outbox
+  chip, as a synced message carries its folder, and says where its time
+  would be how far it got: Waiting for you, In Outbox, Sending, or Not sent
+  in red with a red node on the graph.
+- **The status is one line with a dot** (`mail-status.ts`). Green when
+  nothing needs you, yellow for one thing, red for more than one, or for one
+  that stops everything: no connection, or no account syncing at all. One
+  problem is named on the line; more are counted ("2 things need you"). A
+  click opens the list above it, problems first, every account on its own
+  line with when it last synced, each with its Try again or Show. Syncing
+  and a queued message are not problems: the line says what is happening
+  with a turning icon and stays green.
+- **Juno's own messages are picked like threads.** In Drafts and Outbox a
+  row's left edge is a box, shown on hover and while anything is picked, and
+  the bar then offers Send (Drafts only) and Delete for all of them, after
+  one question that names the count. `requestSendMany` and `removeMany` do
+  each message on its own and name the ones they could not, with why, so one
+  draft without a recipient does not hold back the rest. Deleting several is
+  `mail.outbox.delete_many` for an agent, in the Delete row; sending several
+  has no tool, like sending one.
+- **Going to a folder closes an open message.** The composer saves what is
+  not saved yet and closes, as Escape does, so the folder clicked is what
+  shows.
+
+**What would reverse this:** a server-side Outbox folder that Juno writes to,
+which would make it an ordinary special folder.

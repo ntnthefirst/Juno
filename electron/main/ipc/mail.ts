@@ -267,6 +267,10 @@ export function registerMailIpc(): void {
 	ipcMain.handle("mail.outbox.returnToDraft", (_event, id: string) => outbox.returnToDraft(id));
 	ipcMain.handle("mail.outbox.retry", (_event, id: string) => outbox.retry(id));
 	ipcMain.handle("mail.outbox.remove", (_event, id: string) => outbox.remove(id));
+	// Several at once, from a selection in Drafts or Outbox. Sending is a
+	// person's press here too, so it has no MCP twin either.
+	ipcMain.handle("mail.outbox.sendMany", (_event, ids: string[]) => outbox.requestSendMany(ids));
+	ipcMain.handle("mail.outbox.removeMany", (_event, ids: string[]) => outbox.removeMany(ids));
 	// Files from this machine. No MCP twin on purpose: adding one takes a file
 	// the person chose here, and no tool may take a path (mcp.md section 7).
 	ipcMain.handle("mail.outbox.files.choose", (_event, outboxId: string) => outboxPicker.choose(outboxId));

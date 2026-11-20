@@ -156,6 +156,7 @@ import type {
 	MailMessageBody,
 	MailMessageClient,
 	MailOutboxCounts,
+	MailOutboxManyResult,
 	MailOutboxListQuery,
 	MailOutboxMessage,
 	MailRecipientSuggestion,
@@ -1228,6 +1229,10 @@ export interface JunoApi {
 			returnToDraft(id: string): Promise<MailOutboxMessage>;
 			retry(id: string): Promise<MailOutboxMessage>;
 			remove(id: string): Promise<MailOutboxMessage>;
+			/** The person's press on Send with several drafts selected. Each is queued or refused on its own. */
+			sendMany(ids: string[]): Promise<MailOutboxManyResult>;
+			/** Deletes several messages that have not gone out, each on its own. */
+			removeMany(ids: string[]): Promise<MailOutboxManyResult>;
 			/**
 			 * Files attached from this machine, of any kind. Sent and not kept,
 			 * unless keep is set for a PDF, which then becomes a document once the

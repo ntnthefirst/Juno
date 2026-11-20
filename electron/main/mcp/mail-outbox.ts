@@ -561,6 +561,30 @@ export const mailOutboxTools: ToolDescriptor[] = [
 		handler: async (args) => outbox.remove(String(args.id)),
 	},
 	{
+		name: "mail.outbox.delete_many",
+		title: "Delete several outbox messages",
+		description:
+			"Deletes several drafts or waiting or failed messages in one go, as one request listing every id. " +
+			"Each is deleted or refused on its own: one being sent or already sent stays as a record and is " +
+			"named in refused with the reason. A person approves the deletion in the app first.",
+		readOnly: false,
+		requiresConfirmation: true,
+		inputSchema: {
+			type: "object",
+			properties: {
+				ids: {
+					type: "array",
+					items: { type: "string" },
+					minItems: 1,
+					description: "The message ids, from mail.outbox.list.",
+				},
+			},
+			required: ["ids"],
+			additionalProperties: false,
+		},
+		handler: async (args) => outbox.removeMany((args.ids as unknown[]).map(String)),
+	},
+	{
 		name: "mail.outbox.attach_project_file",
 		title: "Attach a project's file to a draft",
 		description:

@@ -106,6 +106,17 @@ export function specialFolders(folders: MailFolder[]): { folder: MailFolder; use
 	});
 }
 
+/**
+ * Where Outbox goes among the special folders listed: after Sent, as most
+ * mail clients put it, or after the last of Drafts and Inbox when the account
+ * has no Sent. Outbox is not a folder on the server but what Juno has not sent
+ * yet, so it is listed for every account whatever the server has.
+ */
+export function outboxAfter(uses: MailSpecialUse[]): MailSpecialUse | null {
+	for (const use of ["sent", "drafts", "inbox"] as const) if (uses.includes(use)) return use;
+	return null;
+}
+
 /** Every node of a tree, flattened, for a picker that needs one list. */
 export function flattenTree(nodes: FolderNode[], depth = 0): { node: FolderNode; depth: number }[] {
 	return nodes.flatMap((node) => [{ node, depth }, ...flattenTree(node.children, depth + 1)]);

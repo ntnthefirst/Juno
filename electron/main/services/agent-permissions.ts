@@ -319,6 +319,7 @@ export const TOOL_ROWS: Record<AgentPermissionKind, string[]> = {
 		"mail.file.empty_folder",
 		"mail.folders.remove",
 		"mail.outbox.delete",
+		"mail.outbox.delete_many",
 		"mail.rules.delete",
 		"notes.delete",
 		"notes.delete_many",

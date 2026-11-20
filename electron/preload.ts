@@ -686,6 +686,8 @@ const api: JunoApi = {
 			returnToDraft: (id) => call("mail.outbox.returnToDraft", id),
 			retry: (id) => call("mail.outbox.retry", id),
 			remove: (id) => call("mail.outbox.remove", id),
+			sendMany: (ids) => call("mail.outbox.sendMany", ids),
+			removeMany: (ids) => call("mail.outbox.removeMany", ids),
 			files: {
 				choose: (outboxId) => call("mail.outbox.files.choose", outboxId),
 				add: (outboxId, input) => call("mail.outbox.files.add", outboxId, input),

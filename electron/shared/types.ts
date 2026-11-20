@@ -3082,6 +3082,15 @@ export interface MailOutboxCounts {
 	drafts: number;
 }
 
+/**
+ * What a send or a delete of several messages did. Each is done or refused
+ * on its own, so one draft with no recipient does not hold back the rest.
+ */
+export interface MailOutboxManyResult {
+	done: MailOutboxMessage[];
+	refused: { id: string; subject: string; reason: string }[];
+}
+
 /* ----------------------------------------------------------------- calendar */
 
 /**

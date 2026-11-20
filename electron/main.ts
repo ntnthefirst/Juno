@@ -4369,6 +4369,102 @@ if (!app.requestSingleInstanceLock()) {
 										})()`,
 									);
 									if (opened !== "ok") throw new Error(`Smoke: drafts ${opened}`);
+
+									// A message that did not go leaves Drafts for Outbox, which is
+									// listed after Sent, and the line at the foot of the folders
+									// turns yellow for it and opens to the list of what it counts.
+									// The step above leaves a draft open in the composer, which
+									// would cover the list and could save over the change below.
+									await window.webContents.executeJavaScript(
+										`(async () => {
+											document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+											await new Promise((r) => setTimeout(r, 1500));
+										})()`,
+									);
+									// Drafts can be held together to send or delete, and a draft
+									// open in the composer closes when another folder is clicked.
+									const held = await window.webContents.executeJavaScript(
+										`(async () => {
+											const nav = (label) => [...document.querySelectorAll("button")].find((el) => el.textContent.trim().replace(/\\d+$/, "") === label);
+											nav("Drafts")?.click();
+											await new Promise((r) => setTimeout(r, 900));
+											const boxes = [...document.querySelectorAll("li[data-draft-kind=outbox] input[type=checkbox]")];
+											if (boxes.length < 2) return "fewer than two drafts to hold: " + boxes.length;
+											boxes[0].click();
+											boxes[1].click();
+											await new Promise((r) => setTimeout(r, 300));
+											const bar = document.querySelector("[role=toolbar][aria-label=Selection]");
+											if (!bar || !bar.textContent.includes("2 selected")) return "no bar for two held drafts: " + (bar?.textContent ?? "none");
+											const labels = [...bar.querySelectorAll("button")].map((b) => (b.getAttribute("aria-label") || b.textContent).trim());
+											if (!labels.some((l) => l.startsWith("Send")) || !labels.some((l) => l.startsWith("Delete"))) return "the bar offers " + labels.join(", ");
+											boxes[0].click();
+											boxes[1].click();
+											await new Promise((r) => setTimeout(r, 300));
+											document.querySelector("li[data-draft-kind=outbox] button")?.click();
+											await new Promise((r) => setTimeout(r, 1200));
+											if (!document.querySelector("[contenteditable][aria-label=Message]")) return "the draft did not open";
+											nav("Inbox")?.click();
+											await new Promise((r) => setTimeout(r, 1500));
+											if (document.querySelector("[contenteditable][aria-label=Message]")) return "the draft stayed open over Inbox";
+											return "ok";
+										})()`,
+									);
+									if (held !== "ok") throw new Error(`Smoke: drafts held ${held}`);
+									console.log("SMOKE_DEMO drafts held together, and an open draft closes on another folder");
+									const smokeOutbox = await import("./main/services/mail-outbox");
+									const failing = (await smokeOutbox.list({ states: ["draft"] })).find((m) => m.subject === "Even navragen");
+									if (!failing) throw new Error("Smoke: no draft to fail for Outbox");
+									smokeOutbox.markFailed(failing.id, "Could not reach smtp.juno.test.", false);
+									window.webContents.send("mail.outboxChanged", await smokeOutbox.get(failing.id));
+									const outboxStep = await window.webContents.executeJavaScript(
+										`(async () => {
+											await new Promise((r) => setTimeout(r, 900));
+											const nav = [...document.querySelectorAll("button")].find((el) => el.textContent.trim().startsWith("Outbox"));
+											if (!nav) return "no Outbox entry";
+											const names = [...document.querySelectorAll("button")].map((el) => el.textContent.trim().replace(/\\d+$/, ""));
+											if (names.indexOf("Outbox") !== names.indexOf("Sent") + 1) return "Outbox is not after Sent";
+											nav.click();
+											await new Promise((r) => setTimeout(r, 900));
+											if (!document.body.textContent.includes("Even navragen")) return "the failed message is not in Outbox";
+											const line = document.querySelector("[data-mail-status]");
+											if (!line) return "no status line";
+											if (line.getAttribute("data-tone") !== "warn") return "the status line is " + line.getAttribute("data-tone") + ", not yellow: " + line.textContent;
+											if (!line.textContent.includes("1 message was not sent")) return "the status line says " + line.textContent;
+											return "ok";
+										})()`,
+									);
+									if (outboxStep !== "ok") throw new Error(`Smoke: outbox ${outboxStep}`);
+									const shootOutbox = async (name: string) => {
+										for (const theme of ["light", "dark"] as const) {
+											nativeTheme.themeSource = theme;
+											await window.webContents.executeJavaScript(
+												`document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+											);
+											await new Promise((r) => setTimeout(r, 300));
+											const shot = await capture(window.webContents);
+											writeFileSync(joinPath(shotDir, `${name}-${theme}.png`), shot.toPNG());
+										}
+									};
+									await shootOutbox("outbox-list");
+									const statusOpen = await window.webContents.executeJavaScript(
+										`(async () => {
+											document.querySelector("[data-mail-status]")?.click();
+											await new Promise((r) => setTimeout(r, 500));
+											const list = document.querySelector("[data-mail-status-list]");
+											if (!list) return "the status line did not open";
+											if (!list.textContent.includes("1 message was not sent")) return "the list does not name the failed message";
+											if (!list.textContent.includes("is up to date")) return "the list does not name the account";
+											return "ok";
+										})()`,
+									);
+									if (statusOpen !== "ok") throw new Error(`Smoke: status ${statusOpen}`);
+									await shootOutbox("mail-status-open");
+									await window.webContents.executeJavaScript(
+										`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+									);
+									// Put it back as it was, so the steps after this one find the draft.
+									await smokeOutbox.returnToDraft(failing.id);
+									console.log("SMOKE_DEMO outbox lists the failed message after Sent, status line yellow");
 								}
 								if (screen === "Mail") {
 									// The list and the composer, both themes, before a thread takes

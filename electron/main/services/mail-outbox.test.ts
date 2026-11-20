@@ -471,6 +471,43 @@ describe("the gate", () => {
 	});
 });
 
+describe("several at once", () => {
+	const make = async (to: string | null, subject: string) =>
+		(
+			await outbox.createDraft(
+				{ accountId, to: to ? [{ name: null, address: to }] : [], subject, bodyText: "Hallo." },
+				db,
+			)
+		).id;
+
+	it("queues every draft it can and names the one it cannot, with why", async () => {
+		const first = await make("laura@obet.be", "Offerte");
+		const second = await make("kris@obet.be", "Planning");
+		const nobody = await make(null, "Zonder adres");
+		const result = await outbox.requestSendMany([first, second, nobody, first], db);
+		expect(result.done.map((m) => m.id).sort()).toEqual([first, second].sort());
+		expect(result.done.every((m) => m.state === "queued")).toBe(true);
+		expect(result.refused).toHaveLength(1);
+		expect(result.refused[0]).toMatchObject({ id: nobody, subject: "Zonder adres" });
+		expect((await outbox.get(nobody, db))!.state).toBe("draft");
+	});
+
+	it("deletes what has not gone and keeps a sent message as a record", async () => {
+		const draft = await make("laura@obet.be", "Offerte");
+		const sent = await make("kris@obet.be", "Planning");
+		db.update(mailOutbox).set({ state: "sent" }).where(eq(mailOutbox.id, sent)).run();
+		const result = await outbox.removeMany([draft, sent], db);
+		expect(result.done.map((m) => m.id)).toEqual([draft]);
+		expect(result.refused).toMatchObject([{ id: sent, subject: "Planning" }]);
+		expect(await outbox.get(draft, db)).toBeNull();
+		expect((await outbox.get(sent, db))!.state).toBe("sent");
+	});
+
+	it("asks for a selection when given none", async () => {
+		await expect(outbox.removeMany([], db)).rejects.toThrow(/Select at least one/);
+	});
+});
+
 describe("the Drafts count", () => {
 	/** A draft the server holds, in its own conversation unless one is given. */
 	function serverDraft(folderId: string, uid: number, threadId?: string): string {
@@ -497,7 +534,7 @@ describe("the Drafts count", () => {
 		return thread;
 	}
 
-	it("counts what the Drafts list shows: one row per server conversation and every message not sent yet", async () => {
+	it("counts what the Drafts list shows: one row per server conversation and every draft Juno keeps", async () => {
 		const drafts = db
 			.insert(mailFolders)
 			.values({ accountId, path: "Drafts", name: "Drafts", specialUse: "drafts", syncEnabled: true })
@@ -523,10 +560,13 @@ describe("the Drafts count", () => {
 		db.update(mailOutbox).set({ deletedAt: "2026-09-02T10:00:00.000Z" }).where(eq(mailOutbox.id, deleted)).run();
 
 		// The list the Drafts view draws, built from the same two queries the window makes.
+		// The pending and the failed message are under Outbox, so they are not counted here.
 		const listed =
 			(await threads.listThreads({ accountId, folderId: drafts }, db)).length +
-			(await outbox.list({ accountId, states: ["draft", "pending", "queued", "sending", "failed"] }, db)).length;
-		expect(listed).toBe(5);
+			(await outbox.list({ accountId, states: ["draft"] }, db)).length;
+		expect(listed).toBe(3);
+		const inOutbox = await outbox.counts(accountId, db);
+		expect(inOutbox.pending + inOutbox.queued + inOutbox.failed).toBe(2);
 		expect(await threads.countDrafts(accountId, db)).toBe(listed);
 		expect(await threads.countDrafts(undefined, db)).toBe(listed);
 		expect(await threads.countDrafts("another-account", db)).toBe(0);

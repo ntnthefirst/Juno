@@ -152,6 +152,7 @@ export type IconName =
 	| "sync"
 	| "import"
 	| "export"
+	| "outbox"
 	| "phone"
 	| "address"
 	| "chevron-down"
@@ -460,6 +461,11 @@ const DRAWN = {
 		</>,
 	),
 	wrap: glyph(<path d="M4 7h12.5a3 3 0 0 1 0 6H9m2.5-2.5L9 13l2.5 2.5M4 17h4" />),
+	// Sent's paper plane, smaller and tilted 15 degrees up, with wind behind it:
+	// a message on its way out rather than one that has gone.
+	outbox: glyph(
+		<path d="M11.11 10.82 7.75 5.47Q14.74 5.62 21.28 8.1 16.86 13.51 10.88 17.13ZM11.11 10.82 16.04 9.5M3.62 11.58 6.9 10.7M3.36 15.59 7.8 14.4M4.09 18.47 6.6 17.8" />,
+	),
 	keyboard: glyph(
 		<>
 			<rect x="2.5" y="6" width="19" height="12" rx="2" />
@@ -519,6 +525,7 @@ const ICONS: Record<IconName, Glyph> = {
 	sync: ArrowPathIcon,
 	import: ArrowUpTrayIcon,
 	export: ArrowDownTrayIcon,
+	outbox: DRAWN.outbox,
 	phone: PhoneIcon,
 	address: MapPinIcon,
 	"chevron-down": ChevronDownIcon,

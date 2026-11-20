@@ -2,6 +2,23 @@
 
 Newest first. The rules for writing an entry are in `.claude/rules/release-notes.md`.
 
+## 1.4.0
+Released: 2026-11-20
+
+Mail has an Outbox for what is still on its way, and its status is one line.
+
+### New
+- Outbox, after Sent in Mail, holds every message waiting to go out or that failed to go.
+- Drafts can be ticked together and sent or deleted in one go.
+- A reply still in Outbox shows in the conversation, in red when it did not go.
+
+### Improvements
+- The status at the foot of the mail folders is one line with a green, yellow or red dot. Click it to see each part.
+- Drafts lists only drafts. A message waiting for approval, queued or failed is in Outbox.
+
+### Fixes
+- A draft open in the editor used to stay on screen when you clicked another folder.
+
 ## 1.3.2
 Released: 2026-11-19
 
